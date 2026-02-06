@@ -17,8 +17,10 @@ Maintained by the Linux Foundation, SPDX is an ISO standard (ISO/IEC 5962:2021).
 
 ### Primary Use Cases 
 
-*   **License Compliance:** Analyzing and adhering to open source licenses (GPL, Apache, MIT).
-*   **Intellectual Property:** Tracking copyright and ownership across organizational boundaries.
+*   **License Compliance:** 
+    *   Analyzing and adhering to open source licenses (GPL, Apache, MIT).
+*   **Intellectual Property:** 
+    *   Tracking copyright and ownership across organizational boundaries.
 *   **Regulatory Adherence:** 
     *   Critical for meeting government mandates, specifically [Executive Order 14028](https://www.whitehouse.gov/briefing-room/presidential-actions/2021/05/12/executive-order-on-improving-the-nations-cybersecurity/)
     *   As an ISO standard, SPDX is a trusted format for delivering the [NTIA Minimum Elements](https://www.ntia.doc.gov/files/ntia/publications/sbom_minimum_elements_report.pdf) required to secure the federal software supply chain.
@@ -120,4 +122,15 @@ Maintained by the **OWASP Foundation**, CycloneDX is a lightweight standard desi
 
 # Decision
 
-TODO
+After evaluating the standards, **CycloneDX** has been selected as the primary format for our software bill of materials.
+
+*   **Security Focus:** 
+    *   Built specifically for application security, it aligns perfectly with our requirements for robust vulnerability management and risk analysis.
+*   **VEX Capabilities:** 
+    *   Native support for VEX (Vulnerability Exploitability Exchange) allows us to efficiently handle false positives and communicate exploitability status.
+*   **Automation Friendly:** 
+    *   The lightweight JSON format and utilization of Package URLs (PURL) are optimized for integration into high-velocity CI/CD pipelines.
+*   **Tooling Integration:** 
+    *   It serves as the native format for OWASP Dependency-Track, enabling continuous component analysis out of the box.
+*   **Compliance:** 
+    *   It satisfies NTIA minimum elements for federal requirements while offering superior operational utility for engineering teams.
