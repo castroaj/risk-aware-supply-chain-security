@@ -11,6 +11,8 @@
     - [Why Use It](#why-use-it-1)
     - [Why NOT Use It](#why-not-use-it-1)
     - [Usage](#usage-1)
+  - [Decision: Trivy](#decision-trivy)
+    - [Justification](#justification)
 
 The following tools have been identified as the most effective options for a Python/Docker technology stack.
 
@@ -132,3 +134,17 @@ real    0m8.047s
 user    0m2.574s
 sys     0m2.603s
 ```
+
+## Decision: Trivy
+
+Based on the comparison above, **Trivy** is the recommended tool for this Python/Docker stack.
+
+### Justification
+
+1.  **Operational Simplicity:** Trivy consolidates SBOM generation and vulnerability scanning into a single binary. This eliminates the need to manage version compatibility between two separate tools (e.g., Syft and Grype) in the CI/CD pipeline.
+2.  **Performance:** In the provided benchmarks, Trivy generated the SBOM significantly faster (`0.964s`) compared to Syft (`6.343s`). This efficiency stems from Trivy's targeted scanning approach, which focuses on package manifests and key binaries required for vulnerability detection. In contrast, Syft performs an exhaustive catalog of file-level metadata and unmanaged executables; while this offers deeper forensic insight, it introduces overhead that is unnecessary for the primary goal of this pipeline (vulnerability management).
+3.  **Python Ecosystem Support:** Trivy meets the core requirement of distinguishing between OS-level Python packages and Pip-installed dependencies, ensuring accurate vulnerability assessment without the overhead of a multi-tool setup.
+4.  **Structured Output for Analysis:** Trivy exports to industry-standard formats (CycloneDX, SPDX) and comprehensive JSON schemas. This output is strictly structured, enabling robust downstream processing for automated auditing, policy enforcement (e.g., Open Policy Agent), or integration with vulnerability management platforms without requiring complex parsing logic.
+5.  **Extended Security Capabilities:** Trivy provides a broader safety net by detecting misconfigurations, secrets, and license violations alongside standard dependency scanning. This "Swiss Army Knife" approach reduces tool sprawl while increasing the overall security coverage of the Docker container lifecycle.
+
+**Note:** Syft remains a viable alternative choice if deep-dive metadata inspection or strict Unix-philosophy tooling separation becomes a hard requirement in the future.

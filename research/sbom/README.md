@@ -22,5 +22,8 @@ The primary goals of this investigation are to:
 *   **Evaluate Tooling**: 
     *   Identify and benchmark the most effective tools available for this specific technology stack to streamline the SBOM generation process. 
     *   This can be found at: [SBOM-Tooling](./SBOM-Tooling.md)
+*   **Github Actions**:
+    *   Identify options available in the github actions platform, and how that aligns with the tooling
+    *   This can be found at: [Github Actions](./SBOM-Github-Actions.md)
 
 *NOTE: Research will also be derived from open internet search engines including google and AI model(s). The model used for this line of research was Google Gemini 3*
