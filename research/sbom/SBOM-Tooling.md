@@ -18,21 +18,19 @@ The following tools have been identified as the most effective options for a Pyt
 
 ## Syft
 
-**Developer:** Anchore<br>
-**GitHub:** [anchore/syft](https://github.com/anchore/syft)<br>
+- **Owner:** Anchore
+- **GitHub Page:** [anchore/syft](https://github.com/anchore/syft)
 
 Syft is widely regarded as the "gold standard" for generating SBOMs from container images. Unlike general-purpose scanners, Syft is purpose-built to inspect the layers of a container image (Docker/OCI) and catalog every artifact found.
 
 ### Deep Dive & Unique Capabilities
+
 Syft excels at decomposing the Docker image filesystem. It identifies:
 
 - **OS-level packages:** It detects the base OS (Alpine, Debian, RedHat) and lists installed system packages (APK, DPKG, RPM).
 - **Application dependencies:** It scans specific directories (like `/usr/local/lib/python3.x/site-packages`) to identify Python libraries installed via Pip.
 
 - **Orphaned binaries:** It can categorize binaries that don't belong to a package manager.
-
-**Why it fits your Python/Docker stack:**
-- Syft is capable of distinguishing between Python packages installed via the OS package manager (e.g., `apt-get install python3-requests`) and those installed via Pip. This distinction is crucial for vulnerability management, as the remediation steps differ.
 
 ### Why Use It
 
@@ -71,29 +69,33 @@ sys     0m1.523s
 **Developer:** Aqua Security<br>
 **GitHub:** [aquasecurity/trivy](https://github.com/aquasecurity/trivy)<br>
 
-Trivy is a comprehensive, all-in-one security scanner. While widely recognized for its vulnerability scanning capabilities, it is also a powerful SBOM generator. Unlike Syft, which focuses solely on generation, Trivy aims to unify the entire security scanning workflow (SBOM, vulnerabilities, misconfigurations, and secrets) into a single tool.
+Trivy is a comprehensive, all-in-one security scanner. While widely recognized for its vulnerability scanning capabilities, it is also a powerful SBOM generator
 
 ### Deep Dive & Unique Capabilities
 
 Trivy operates as a "Swiss Army Knife" for container security. When generating an SBOM, it performs deep inspection similar to Syft:
 
-- **Unified Workflow:** It can generate an SBOM and immediately use that SBOM to scan for vulnerabilities without needing a second tool.
-- **Broad Coverage:** It detects OS packages (Alpine, RedHat, Debian, etc.) and language-specific dependencies (Bundler, Composer, Pip, Poetry, npm, yarn, etc.).
-- **Cloud Native Focus:** Beyond images, it can scan filesystems, git repositories, and Kubernetes clusters.
+- **Unified Workflow:** 
+  - It can generate an SBOM and immediately use that SBOM to scan for vulnerabilities without needing a second tool.
+- **Broad Coverage:** 
+  - Its detection mechanism covers a wide variety of ecosystems, which will enable a larger level of SBOM depth and accuracy
 
 **Why it fits your Python/Docker stack:**
 
-- Trivy has excellent support for Python ecosystems, identifying packages from `pip`, `pipenv`, `poetry`, and `conda`. It effectively separates OS-level Python packages from application-level dependencies.
+- Trivy has excellent support for Python ecosystems, identifying packages from `pip`, `pipenv`, and others. 
+- It will allow us to effectively separate python dependencies from OS-level packages defined in the container image
 
 ### Why Use It
 
-Simplicity and consolidation are the primary drivers for Trivy. Instead of maintaining two binaries (e.g., Syft for SBOMs and Grype for scanning), Trivy handles both. This reduces the operational complexity in CI/CD pipelines. If your goal is "Zero to Scanned" with minimal setup, Trivy is the efficient choice.
+- Simplicity and consolidation are the primary drivers for Trivy. Instead of maintaining multiple tools for scanning/vulnerability detection, Trivy aims to handle the entire ecosystem. 
+- Performance latency for Trivy scans appear to be significantly faster than alternatives
 
 ### Why NOT Use It
 
-If you strictly adhere to the Unix philosophy ("do one thing and do it well"), Trivy might feel bloated compared to Syft. Syft typically provides slightly more granular metadata regarding file locations and relationships within the generated SBOM. If you only need to archive SBOMs for compliance and use a different vendor for vulnerability analysis, Syft is often the cleaner integration.
+- Multi-purpose philosophy may feel bloated if the entire feature-set is not needed
 
 ### Usage
+
 Scan a Docker image and output a CycloneDX JSON file:
 
 Installation:
@@ -141,10 +143,15 @@ Based on the comparison above, **Trivy** is the recommended tool for this Python
 
 ### Justification
 
-1.  **Operational Simplicity:** Trivy consolidates SBOM generation and vulnerability scanning into a single binary. This eliminates the need to manage version compatibility between two separate tools (e.g., Syft and Grype) in the CI/CD pipeline.
-2.  **Performance:** In the provided benchmarks, Trivy generated the SBOM significantly faster (`0.964s`) compared to Syft (`6.343s`). This efficiency stems from Trivy's targeted scanning approach, which focuses on package manifests and key binaries required for vulnerability detection. In contrast, Syft performs an exhaustive catalog of file-level metadata and unmanaged executables; while this offers deeper forensic insight, it introduces overhead that is unnecessary for the primary goal of this pipeline (vulnerability management).
-3.  **Python Ecosystem Support:** Trivy meets the core requirement of distinguishing between OS-level Python packages and Pip-installed dependencies, ensuring accurate vulnerability assessment without the overhead of a multi-tool setup.
-4.  **Structured Output for Analysis:** Trivy exports to industry-standard formats (CycloneDX, SPDX) and comprehensive JSON schemas. This output is strictly structured, enabling robust downstream processing for automated auditing, policy enforcement (e.g., Open Policy Agent), or integration with vulnerability management platforms without requiring complex parsing logic.
-5.  **Extended Security Capabilities:** Trivy provides a broader safety net by detecting misconfigurations, secrets, and license violations alongside standard dependency scanning. This "Swiss Army Knife" approach reduces tool sprawl while increasing the overall security coverage of the Docker container lifecycle.
+1.  **Operational Simplicity:** 
+    - Trivy consolidates SBOM generation and vulnerability scanning into a single binary. 
+    - This eliminates the need to manage version compatibility between two separate tools (e.g., Syft and Grype) in the CI/CD pipeline.
+2.  **Performance:** 
+    - In the provided benchmarks, Trivy generated the SBOM significantly faster (`0.964s`) compared to Syft (`6.343s`). - This efficiency stems from Trivy's targeted scanning approach, which focuses on package manifests and key binaries required for vulnerability detection.
+3.  **Python Ecosystem Support:** 
+    - Trivy meets the core requirement of distinguishing between OS-level Python packages and Pip-installed dependencies
+4.  **Structured Output for Analysis:** 
+    - Trivy exports to industry-standard formats (CycloneDX, SPDX) and comprehensive JSON schemas. 
+    - This output is strictly structured, enabling robust downstream processing for automated auditing, policy enforcement
 
-**Note:** Syft remains a viable alternative choice if deep-dive metadata inspection or strict Unix-philosophy tooling separation becomes a hard requirement in the future.
+**Note:** Syft remains a viable alternative choice if deep-dive metadata inspection
