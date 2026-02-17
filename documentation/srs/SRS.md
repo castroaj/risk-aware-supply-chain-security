@@ -2,7 +2,7 @@
 ## Risk-Aware Compliance-as-Code CI/CD Pipeline  
 **CYSE 690 Capstone — Spring 2026**
 
-**Version:** 0.1 (Phase 1 Skeleton Draft)  
+**Status:** Draft — Under Active Development
 **Last Updated:** Feb 2026  
 
 ---
@@ -223,27 +223,34 @@ Future Phase Expansion:
 
 ---
 
-# 7. Phase 1 Completion Criteria
+## 7. Document Status and Evolution
 
-Phase 1 is considered complete when:
+This SRS is a living project document and will be continuously updated throughout
+Phases 1–5 of the capstone.
 
-- SRS skeleton exists in repo  
-- Baseline FR/NFR requirements are agreed upon  
-- EO 14028 compliance mapping is documented  
-- Logging/audit expectations are defined  
+The initial draft establishes:
 
----
+- Baseline functional and non-functional requirements  
+- Compliance alignment with Executive Order 14028  
+- Audit logging and evidence retention expectations  
 
-# Next Steps (Phase 2)
-
-Planned additions in Phase 2:
-
-- Tool-specific schema definition  
-- ML feature mapping  
-- Detailed use cases (ALLOW/WARN/BLOCK scenarios)  
-- Expanded compliance controls and KPIs  
-- Architecture diagrams and workflow enforcement logic  
+All future refinements (architecture details, ML schema, enforcement workflows,
+and expanded compliance controls) will be introduced through pull requests and
+tracked via Git version history.
 
 ---
 
-**End of Phase 1 SRS Skeleton Draft**
+## 8. Planned Future Additions
+
+The following sections will be expanded incrementally as the system matures:
+
+- Tool-specific schema definitions for scan output normalization  
+- ML feature mapping and risk classification explainability  
+- Detailed use cases for ALLOW/WARN/BLOCK decision outcomes  
+- Expanded compliance controls, KPIs, and governance workflows  
+- Architecture diagrams and CI/CD enforcement integration details  
+
+---
+
+**End of Current Draft — Under Active Development**
+
