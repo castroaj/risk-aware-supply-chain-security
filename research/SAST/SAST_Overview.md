@@ -1,4 +1,4 @@
-SAST Overview and Tool Evaluation
+# SAST Overview and Tool Evaluation
 
 Static Application Security Testing (SAST) is a core component of modern secure software development that analyzes source code, bytecode, or binaries without executing the application. By identifying vulnerabilities early in the software development lifecycle, SAST supports the “shift-left” security model and enables developers to remediate issues before deployment. This approach reduces remediation costs, improves code quality, and provides evidence of secure development practices required by modern compliance frameworks and government guidance.
 
