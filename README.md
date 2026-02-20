@@ -21,6 +21,9 @@
 - This is to give overview of the role of Static Application Security Testing (SAST) in improving software security within modern CI/CD pipelines and software supply-chain environments. 
 - It provides an overview of how SAST tools detect vulnerabilities early in the development lifecycle and how they are integrated with complementary technologies such as Software Bills of Materials (SBOM) generation, dependency vulnerability scanning, and compliance reporting.
 
+[Dynamic Scanning](./research/dynamic_scanning/Dynamic_Scanning.md)
+- This is to give an overview on different dynamic scanning tools or techniques to improve the software security within our pipeline
+
 ## Software Prototype
 
 TODO
