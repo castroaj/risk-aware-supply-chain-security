@@ -17,6 +17,10 @@
   - Tools that will fulfill the needs for the project
   - Options within the Github Actions platform
 
+[SAST](./research/SAST/SAST_Overview.md)
+- This is to give overview of the role of Static Application Security Testing (SAST) in improving software security within modern CI/CD pipelines and software supply-chain environments. 
+- It provides an overview of how SAST tools detect vulnerabilities early in the development lifecycle and how they are integrated with complementary technologies such as Software Bills of Materials (SBOM) generation, dependency vulnerability scanning, and compliance reporting.
+
 ## Research
 
 TODO
