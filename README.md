@@ -6,7 +6,7 @@
 - [Project Plan](./documentation/project-plan/) - Project plan document, covering what the project aims to cover and how it plans to do so
 - [SRS Document](./documentation/srs/) - Official documentation for the project including scope, design, and requirements
 
-## Software Prototype
+## Research
 
 [Software Bill of Materials (SBOM)](./research/sbom/README.md)
 - Research into SBOM generation, management, and standards (NTIA) for Python and Docker environments
@@ -21,6 +21,6 @@
 - This is to give overview of the role of Static Application Security Testing (SAST) in improving software security within modern CI/CD pipelines and software supply-chain environments. 
 - It provides an overview of how SAST tools detect vulnerabilities early in the development lifecycle and how they are integrated with complementary technologies such as Software Bills of Materials (SBOM) generation, dependency vulnerability scanning, and compliance reporting.
 
-## Research
+## Software Prototype
 
 TODO
