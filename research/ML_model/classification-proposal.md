@@ -1,7 +1,8 @@
 # ML Methodology Proposal: Risk-Based Classification Model
+
 Project: Risk-Aware Compliance-as-Code  
-Author: Ayra Islam  
-Date: Feb 22, 2026
+Author: Ayra Islam, Alexander Castro  
+Date: Feb 22, 2026 (Modified: Feb 26, 2026)  
 
 ---
 
@@ -29,11 +30,12 @@ Pipeline Flow:
 2. Build and unit tests execute
 3. SBOM generation occurs
 4. Vulnerability scanning executes
-5. Unified SBOM and vulnerability output is generated
-6. ML Risk Classifier consumes structured feature set
-7. Risk-Based Decision is produced
-8. Enforcement logic applies ALLOW, WARN, or BLOCK
-9. All decisions logged to immutable audit log
+5. SAST canning executes
+6. Unified SBOM, vulnerability, and SAST output is generated
+7. ML Risk Classifier consumes structured feature set
+8. Risk-Based Decision is produced
+9. Enforcement logic applies ALLOW, WARN, or BLOCK
+10. All decisions logged to immutable audit log
 
 The ML model operates strictly on structured outputs from prior deterministic tools.
 
@@ -49,28 +51,33 @@ Structured feature vector derived from:
 - SBOM dependency metrics
 - Vulnerability severity distribution
 - SAST findings
-- Build metadata
+- Build metadata (container)
 
 Example features include:
-- Total dependency count
-- Vulnerable dependency count
-- Critical CVE count
-- High CVE count
-- Maximum CVSS score
-- Total SAST findings
-- High-severity SAST findings
-- New dependency indicator (binary)
-- Test pass rate
-- Container base image age
+- SBOM (Trivy)
+  - `total_dependency_count`
+- Vulnerability Scan (Trivy)
+  - `vuln_total`
+  - `critical_cve_count`
+  - `high_cve_count`
+  - `cvss_ge_7_count`
+  - `max_cvss`
+  - `unique_cwe_count`
+  - `top25_cwe_count`
+- SAST Scan (Semgrep)
+  - `semgrep_total`
+  - `semgrep_high_count`
+- Build Metadata (container)
+  - `base_image_age_days`
 
-Each CI/CD run generates one feature vector.
+Each CI/CD run generates one feature vector. These features aim to capture an application's security profile without exploding dimensionality.
 
 ### Output
 
-The classifier produces:
-- Class label: ALLOW / WARN / BLOCK
-- Class probability distribution
-- Risk score (optional continuous value)
+The classifier produces a `class_label` based upon classification:
+  - BLOCK 
+  - WARN
+  - ALLOW
 
 ---
 
@@ -194,6 +201,7 @@ Artifact retention ensures that:
 - Overrides can be justified with traceable documentation
 
 Artifacts are versioned and associated with the immutable audit log entry for that build.
+
 ---
 
 ## X. Model Lifecycle Management
@@ -220,7 +228,31 @@ The classifier supports prioritization and efficiency but does not serve as fina
 
 ---
 
-## XII. Conclusion
+## XII. Classification Example
+
+The below pseudo-code demonstrates a potential classification decisions
+
+```python
+if (
+    critical_cve_count > MIN_ALLOWABLE_CRITICAL_CVE or \
+    max_cvss >= MAX_ALLOWABLE_CVSS or \
+    (high_cve_count >= MIN_ALLOWABLE_HIGH_CVE_COUNT and fix_available_count >= MIN_ALLOWABLE_FIX_AVAILABLE_COUNT) or \
+    semgrep_high_count > ALLOWABLE_SEMGREP_HIGH_COUNT
+    ):
+    return "BLOCK"
+elif (
+    high_cve_count in ALLOWABLE_HIGH_CVE_RANGE or \
+    cvss_ge_7_count >= ALLOWABLE_CVSS_GE_7_COUNT or \
+    semgrep_total >= ALLOWABLE_SEMGREP_COUNT
+   ):
+    return "WARN"
+else:
+    return "ALLOW"
+```
+
+---
+
+## XIII. Conclusion
 
 The Decision Tree–based ML classifier provides structured, contextual, and efficient risk aggregation within the CI/CD workflow.
 
