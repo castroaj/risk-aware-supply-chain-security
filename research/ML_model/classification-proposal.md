@@ -62,7 +62,6 @@ Example features include:
   - `high_cve_count`
   - `cvss_ge_7_count`
   - `max_cvss`
-  - `fix_available_count`
   - `unique_cwe_count`
   - `top25_cwe_count`
 - SAST Scan (Semgrep)
