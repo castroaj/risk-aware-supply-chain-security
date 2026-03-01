@@ -1,6 +1,6 @@
-# ML Training Data Generation: Automated Harvesting & Labeling
+# ML Training Data Generation
 
-- [ML Training Data Generation: Automated Harvesting \& Labeling](#ml-training-data-generation-automated-harvesting--labeling)
+- [ML Training Data Generation](#ml-training-data-generation)
   - [I. Purpose and Scope](#i-purpose-and-scope)
   - [II. Data Sourcing Strategy](#ii-data-sourcing-strategy)
   - [III. Automated Pipeline Execution](#iii-automated-pipeline-execution)
