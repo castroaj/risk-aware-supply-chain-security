@@ -1,7 +1,5 @@
 # Risk-Aware Compliance-as-Code: An ML-Gated Secure CI/CD Pipeline for Software Supply Chain Integrity
 
-![High Level Design](./documentation/design/high-level-design.drawio.png)
-
 ## Documentation
 
 - [Design](./documentation/design/) - Includes diagrams or documentation detailing the architecture of the pipeline
@@ -27,6 +25,25 @@
 [Dynamic Scanning](./research/dynamic_scanning/Dynamic_Scanning.md)
 - This is to give an overview on different dynamic scanning tools or techniques to improve the software security within our pipeline
 
+[ML Model](./research/ML_model/)
+- Includes documents relating to the risk-aware classification process based upon SBOM, vulnerability scanning, and SAST results
+- Key Documents:
+  - [nist-ssdf-research](./research/ML_model/nist-ssdf-research.md)
+  - [Classification Proposal](./research/ML_model/classification-proposal.md)
+  - [Feature Extraction](./research/ML_model/feature-extraction.md)
+
 ## Software Prototype
 
 TODO
+
+## High Level Design
+
+![High Level Design](./documentation/design/high-level-design.drawio.png)
+
+> Details the high-level design for the CI/CD pipeline
+
+## ML Classification Architecture
+
+![ML Classification Architecture](./documentation/design/ml-architecture.drawio.png)
+
+> Details the design for the ML-Classification architecture
