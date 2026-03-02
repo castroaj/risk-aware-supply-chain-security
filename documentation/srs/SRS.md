@@ -3,6 +3,7 @@
 **CYSE 690 Capstone — Spring 2026**
 
 **Status:** Under Active Development
+
 **Last Updated:** Mar 2026  
 
 ---
@@ -175,22 +176,43 @@ The system shall generate an SBOM for every build artifact using an automated to
 
 ---
 
-## FR-2 Static Application Security Testing (SAST)
+## FR-2 SBOM Minimum Data Fields
+
+The generated SBOM shall include, at minimum:
+
+- Supplier name 
+- Component name 
+- Component version 
+- Unique identifiers (e.g., CPE, PURL)
+- Dependency relationships (including transitive dependencies)
+- Author of SBOM data 
+- Timestamp of SBOM generation
+
+---
+
+## FR-3 SBOM Operational Requirements
+
+- A new SBOM shall be generated for every build or dependency change.
+- The SBOM shall be produced in a machine-readable format (CycloneDX or SPDX).
+
+---
+
+## FR-4 Static Application Security Testing (SAST)
 The system shall run static security scanning (e.g., Bandit) on source code and produce structured findings.
 
 ---
 
-## FR-3 Vulnerability and Dependency Scanning
+## FR-5 Vulnerability and Dependency Scanning
 The system shall scan dependencies and container artifacts for known vulnerabilities.
 
 ---
 
-## FR-4 Unified Output Schema
+## FR-6 Unified Output Schema
 The system shall normalize outputs from SBOM and scanning tools into a unified schema for ML ingestion.
 
 ---
 
-## FR-5 ML Risk Classification Gate
+## FR-7 ML Risk Classification Gate
 The system shall classify builds into one of the following outcomes:
 
 - ALLOW  
@@ -201,13 +223,12 @@ based on contextual risk signals.
 
 The ML classifier shall:
 - Output a classification label (ALLOW/WARN/BLOCK).
-- Output a confidence or probability score.
 - Log the input feature vector used for classification.
 - Support traceability of feature contributions used in classification for audit review.
 
 ---
 
-## FR-6 Deployment Enforcement
+## FR-8 Deployment Enforcement
 
 The system shall enforce deployment decisions based on ML classification outcomes.
 
@@ -226,24 +247,35 @@ All enforcement outcomes shall be logged in the audit record.
 
 ---
 
-## FR-7 Compliance Logging
-The system shall retain, per build execution:
+## FR-9 Manual Override Capability
 
-- Scan outputs  
-- SBOM artifacts  
-- ML classification decisions  
-- Enforcement actions
-- Extracted feature vector
-- ML confidence score
-- Manual override records (if applicable)
-- User identity associated with override
-- Timestamped enforcement decision
+The system shall support manual override for WARN and BLOCK outcomes.
 
-to support compliance evidence and audit review.
+Override actions must:
+
+- Record reviewer identity. 
+- Record justification for override. 
+- Be stored in the audit log. 
+- Be restricted to authorized reviewers.
 
 ---
 
-## FR-8 Feature Extraction and Normalization
+## FR-10 Compliance Logging
+The system shall retain, per build execution:
+
+- Scan outputs 
+- SBOM artifacts 
+- ML classification decisions 
+- Enforcement actions 
+- Extracted feature vector 
+- Manual override records (if applicable)
+- Timestamped enforcement decision
+
+All retained artifacts must support audit traceability.
+
+---
+
+## FR-11 Feature Extraction and Normalization
 
 The system shall extract security-relevant statistics from SBOM, vulnerability,
 and SAST outputs and normalize them into a fixed feature vector schema
@@ -251,51 +283,32 @@ for ML classification.
 
 ---
 
-# 4. ML Governance and Override Requirements
+## FR-12 Compliance – SBOM Transparency
 
-## 4.1 Model Governance
+The system shall generate machine-readable SBOMs for each build in alignment with EO 14028 requirements.
 
-The ML classifier shall:
+---
 
-- Be version-controlled.
-- Operate in inference-only mode within CI/CD.
-- Log model version used per build.
-- Support offline retraining using labeled datasets.
+## FR-13 Compliance – Secure Build Practices
 
-## 4.2 Manual Override Policy
+The system shall enforce vulnerability scanning and risk-based gating prior to deployment.
 
-The system shall support manual override for WARN and BLOCK outcomes.
+---
 
-Override actions must:
+## FR-14 SBOM Dependency Completeness
 
-- Record reviewer identity.
-- Record justification for override.
-- Be stored in the audit log.
-- Be incorporated into future retraining dataset evaluation.
-- Override capability shall be restricted to authorized reviewers.
+The SBOM shall explicitly distinguish between components with no dependencies and components with unknown or incomplete dependency information.
 
-## 4.3 Explainability Requirement
+---
 
-The system shall retain sufficient feature-level data to allow post-deployment audit of:
+## FR-15 SBOM Integrity Verification
 
-- Why a decision was made.
-- Which features contributed to classification.
+The system shall include cryptographic hashes for SBOM-listed components to support verification of exact component versions used in the build.
 
-## 4.4 Severity Assessment Rationale
+---
 
-Risk classification is influenced by measurable security indicators including:
 
-- Critical vulnerability counts
-- Maximum CVSS score
-- Presence of fix-available vulnerabilities
-- High-severity SAST findings in sensitive categories
-
-These features are selected based on their direct relationship to exploitability,
-impact, and deployment risk.
-
-The model must use only features with documented security relevance.
-
-# 5. Non-Functional Requirements
+# 4. Non-Functional Requirements
 
 ## NFR-1 Decision Latency
 
@@ -306,31 +319,29 @@ The total risk decision time (scan + inference + enforcement) must be measurable
 ## NFR-2 Auditability and Traceability
 All pipeline decisions must be traceable to:
 
-- tool outputs  
-- model inputs  
-- enforcement outcomes  
+- Tool outputs  
+- Model inputs  
+- Enforcement outcomes  
 
 ---
 
-## NFR-3 Extensibility
-The system must support modular substitution of scanning tools or ML models.
+## NFR-3 Model Governance
+
+- The ML model shall be version-controlled. 
+- The model shall operate in inference-only mode within CI/CD. 
+- The system shall log the model version used per build.
 
 ---
 
-## NFR-4 Secure Artifact Retention
-Logs and artifacts must be stored securely and protected against tampering.
+## NFR-4 Model Transparency
+
+ML-based decisions must be explainable and auditable.
+The decision logic must be interpretable (e.g., decision tree or rule-based explanation).
+Opaque black-box models are not permitted in the prototype.
 
 ---
 
-## NFR-5 Model Transparency
-
-The system must ensure that ML-based decisions are explainable and auditable.
-The decision logic must be interpretable (e.g., decision tree or rule-based explanation),
-and opaque black-box models are not permitted in the prototype.
-
----
-
-## NFR-6 Artifact Integrity
+## NFR-5 Artifact Integrity
 
 All retained artifacts must be protected against tampering.
 Artifact storage must ensure integrity verification and controlled access.
@@ -339,30 +350,26 @@ must be used to ensure artifact immutability.
 
 ---
 
-## NFR-7 Reproducibility
+## NFR-6 Reproducibility
 
 Given identical inputs (scan outputs and feature vector),
 the ML inference process must produce consistent classification results.
 
 ---
 
+## NFR-7 Compliance – Audit Evidence
 
-# 6. Compliance Requirements (EO 14028 Alignment)
-
-The system will align with Executive Order 14028 through:
-
-| EO 14028 Objective | Pipeline Control |
-|-------------------|------------------|
-| SBOM Transparency | Automated SBOM generation per build |
-| Supply Chain Integrity | Vulnerability scanning + enforcement gate |
-| Secure Build Practices | Hardened GitHub Actions workflow |
-| Audit Evidence | Immutable logging + artifact retention |
-| Model Governance | Version-controlled ML model with logged decision traceability |
-
+All compliance-relevant artifacts must be retained in immutable form to support audit review.
 
 ---
 
-## 7. Document Status and Evolution
+## NFR-8 Compliance – Decision Traceability
+
+ML-based decisions must remain explainable and traceable for governance validation.
+
+---
+
+## 5. Document Status and Evolution
 
 This SRS is a living project document and will be continuously updated throughout
 Phases 1–5 of the capstone.
@@ -379,7 +386,7 @@ tracked via Git version history.
 
 ---
 
-## 8. Planned Future Additions
+## 6. Planned Future Additions
 
 The following sections will be expanded incrementally as the system matures:
 
