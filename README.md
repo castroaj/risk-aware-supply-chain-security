@@ -31,6 +31,7 @@
   - [nist-ssdf-research](./research/ML_model/nist-ssdf-research.md)
   - [Classification Proposal](./research/ML_model/classification-proposal.md)
   - [Feature Extraction](./research/ML_model/feature-extraction.md)
+  - [Training Data Generation Plan](./research/ML_model/training-data-generation-plan.md)
 
 ## Software Prototype
 
