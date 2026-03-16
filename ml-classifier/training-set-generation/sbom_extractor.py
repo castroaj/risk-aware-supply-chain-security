@@ -1,5 +1,6 @@
-import json
-from typing import Dict, Any, List, Set
+from json import load
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace, ArgumentTypeError
+from typing import Dict, Any, Generator, List, Set, Union
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -305,21 +306,63 @@ def build_security_metric_from_sbom(
     except Exception as e:
         raise RuntimeError(f"Failed to extract features and construct SecurityMetric: {e}")
 
-def read_json(path:Path) -> Dict[str, Any]:
+def read_path_data(path:Path) -> Union[List[tuple[Path, Any]], Generator[tuple[Path, Any], Any, None]]:
     """
-    Helper function to read a JSON file from a given path and return it as a dictionary.
+    Wrapper function that processes a path depending on if it's a file or directory.
     """
-    try:
+    if path.is_file():
+        # Operates as it does now: returns the JSON inside a size-1 list
         with open(path, 'r', encoding='utf-8') as f:
-            dict:Dict[str, Any] = json.load(f)
-    except Exception as e:
-        raise RuntimeError(f"Failed to load and parse file at {path}: {e}")
-    return dict
+            return [(path, load(f))]
+            
+    elif path.is_dir():
+        # Defines and returns a generator that yields JSON for each file
+        def _dir_generator() -> Generator[tuple[Path, Any], Any, None]:
+            
+            # Iterating through .json files (adjust the glob pattern if needed)
+            for file_path in path.glob('*.json'):
+                if file_path.is_file():
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        yield (file_path, load(f))
+                        
+        return _dir_generator()
+    else:
+        raise FileNotFoundError(f"Path does not exist or is invalid: {path}")
+    
+def validate_file_path(path_str: str) -> Path:
+    """
+    Validates that the provided path string points to an existing file or directory.
+    """
+    path = Path(path_str)
+    if path.is_file():
+        return path
+    elif path.is_dir():
+        return path
+    else:
+        raise ArgumentTypeError(f"The path '{path_str}' is not a file or directory")
 
-sbom:Dict[str, Any] = read_json("list-vuln-scan/mysql-9.6-debian13-dev.json")
-metric:SecurityMetric = build_security_metric_from_sbom(
-    sbom=sbom,
-    semgrep_high_count=0,
-    semgrep_total=0
-)
-print(metric)
+def parse_args() -> Namespace:
+    """
+    Parses command line arguments.
+    """
+    parser = ArgumentParser(description="Extract security metrics from an SBOM file", 
+                            formatter_class=ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        "-s",
+        "--sbom",
+        type=validate_file_path,
+        required=True,
+        help="Path to the given SBOM directory/file"
+    )
+    return parser.parse_args()
+
+if __name__ == "__main__":
+    args:Namespace = parse_args()
+    
+    for path, sbom in read_path_data(args.sbom):
+        metric: SecurityMetric = build_security_metric_from_sbom(
+        sbom=sbom,
+        semgrep_high_count=0,
+        semgrep_total=0
+        )
+        print(path, metric)
