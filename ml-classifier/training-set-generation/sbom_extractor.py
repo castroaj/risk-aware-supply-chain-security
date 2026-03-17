@@ -1,9 +1,13 @@
-from json import load
+from json import load, dumps
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace, ArgumentTypeError
 from typing import Dict, Any, Generator, List, Set, Union
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+
+# Constants
+JSON_OUTPUT = "json"
+CSV_OUTPUT = "csv"
 
 # Standard MITRE Top 25 CWEs (2025)
 # See https://cwe.mitre.org/top25/archive/2025/2025_cwe_top25.html
@@ -30,6 +34,10 @@ class SecurityMetric:
     """
     Feature vector for the ML Risk-Based Classification Model.
     """
+    # Define some metadata for the scan
+    scan_file:str
+    
+    # Define the feature vector
     total_dependency_count: float
     vuln_total: float
     critical_cve_count: float
@@ -41,6 +49,63 @@ class SecurityMetric:
     semgrep_total: float
     semgrep_high_count: float
     base_image_age_days: float
+
+    def to_json(self) -> str:
+        return dumps(self.__dict__)
+
+    def to_csv(self) -> str:
+        return (
+            f"{self.scan_file},{self.total_dependency_count},{self.vuln_total},"
+            f"{self.critical_cve_count},{self.high_cve_count},"
+            f"{self.cvss_ge_7_count},{self.max_cvss},"
+            f"{self.unique_cwe_count},{self.top25_cwe_count},"
+            f"{self.semgrep_total},{self.semgrep_high_count},"
+            f"{self.base_image_age_days}"
+        )
+
+    @staticmethod
+    def get_csv_header() -> str:
+        return (
+            "scan_file,total_dependency_count,vuln_total,critical_cve_count,"
+            "high_cve_count,cvss_ge_7_count,max_cvss,unique_cwe_count,"
+            "top25_cwe_count,semgrep_total,semgrep_high_count,"
+            "base_image_age_days"
+        )
+
+import pandas as pd
+
+@dataclass
+class SecurityMetricsCollection:
+    """
+    Collection of SecurityMetric objects.
+    """
+    df: pd.DataFrame = None
+    def __post_init__(self):
+        if self.df is None:
+            self.df = pd.DataFrame()
+    def append(self, metric: SecurityMetric) -> None:
+        """
+        Appends a SecurityMetric object to the collection.
+        """
+        new_row = pd.DataFrame([metric.__dict__])
+        if self.df.empty:
+            self.df = new_row
+        else:
+            self.df = pd.concat([self.df, new_row], ignore_index=True)
+    def to_csv(self) -> str:
+        """
+        Exports all metrics in the collection to a CSV string.
+        """
+        if self.df.empty:
+            return SecurityMetric.get_csv_header()
+        return self.df.to_csv(index=False).strip()
+    def to_json(self) -> str:
+        """
+        Exports all metrics in the collection to a JSON string.
+        """
+        if self.df.empty:
+            return "[]"
+        return self.df.to_json(orient="records", indent=4)
 
 def extract_total_dependency_count(sbom: Dict[str, Any]) -> float:
     """
@@ -281,6 +346,7 @@ def _get_highest_score(ratings: List[Dict[str, Any]]) -> float:
     return max_score
 
 def build_security_metric_from_sbom(
+    scan_file:str,
     sbom:Dict[str, Any],
     semgrep_total: float,
     semgrep_high_count: float,
@@ -291,6 +357,7 @@ def build_security_metric_from_sbom(
     """
     try:
         return SecurityMetric(
+            scan_file=scan_file,
             total_dependency_count=extract_total_dependency_count(sbom),
             vuln_total=extract_vuln_total(sbom),
             critical_cve_count=extract_critical_cve_count(sbom),
@@ -341,6 +408,19 @@ def validate_file_path(path_str: str) -> Path:
     else:
         raise ArgumentTypeError(f"The path '{path_str}' is not a file or directory")
 
+def validate_output_path(path_str: str) -> str:
+    """
+    Validates that the provided output path is valid and its parent directory exists.
+    """
+    path = Path(path_str)
+    if path.is_dir():
+        raise ArgumentTypeError(f"The output path '{path_str}' is a directory, but must be a file")
+    if not path.parent.exists():
+        raise ArgumentTypeError(f"The parent directory '{path.parent}' does not exist")
+    if path.parent.is_file():
+        raise ArgumentTypeError(f"The parent is a file '{path.parent}'")
+    return path_str
+
 def parse_args() -> Namespace:
     """
     Parses command line arguments.
@@ -354,15 +434,40 @@ def parse_args() -> Namespace:
         required=True,
         help="Path to the given SBOM directory/file"
     )
+    parser.add_argument(
+        "-f",
+        "--format",
+        type=str,
+        choices=[JSON_OUTPUT, CSV_OUTPUT],
+        default=JSON_OUTPUT,
+        help="Format of the output sent to STDOUT by default"
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=validate_output_path,
+        help="File path to redirect the output to a CSV or JSON file"
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
     args:Namespace = parse_args()
-    
+    metrics = SecurityMetricsCollection()
     for path, sbom in read_path_data(args.sbom):
-        metric: SecurityMetric = build_security_metric_from_sbom(
-        sbom=sbom,
-        semgrep_high_count=0,
-        semgrep_total=0
-        )
-        print(path, metric)
+        metrics.append(build_security_metric_from_sbom(
+            scan_file=path.name,
+            sbom=sbom,
+            semgrep_high_count=0,
+            semgrep_total=0
+        ))
+    
+    if args.format == CSV_OUTPUT:
+        output_data = metrics.to_csv()
+    else:
+        output_data = metrics.to_json()
+
+    if args.output:
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(output_data)
+    else:
+        print(output_data)
