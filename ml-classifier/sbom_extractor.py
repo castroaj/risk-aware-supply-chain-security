@@ -4,6 +4,7 @@ from typing import Dict, Any, Generator, List, Set, Union
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from pandas import DataFrame, concat
 
 # Constants
 JSON_OUTPUT = "json"
@@ -72,26 +73,24 @@ class SecurityMetric:
             "base_image_age_days"
         )
 
-import pandas as pd
-
 @dataclass
 class SecurityMetricsCollection:
     """
     Collection of SecurityMetric objects.
     """
-    df: pd.DataFrame = None
+    df: DataFrame = None
     def __post_init__(self):
         if self.df is None:
-            self.df = pd.DataFrame()
+            self.df = DataFrame()
     def append(self, metric: SecurityMetric) -> None:
         """
         Appends a SecurityMetric object to the collection.
         """
-        new_row = pd.DataFrame([metric.__dict__])
+        new_row = DataFrame([metric.__dict__])
         if self.df.empty:
             self.df = new_row
         else:
-            self.df = pd.concat([self.df, new_row], ignore_index=True)
+            self.df = concat([self.df, new_row], ignore_index=True)
     def to_csv(self) -> str:
         """
         Exports all metrics in the collection to a CSV string.
