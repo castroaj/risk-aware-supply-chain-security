@@ -294,6 +294,8 @@ def extract_base_image_days(sbom: Dict[str, Any]) -> float:
 
     **WHERE:**
     - The `base_image_age_days` is derived by extracting the creation timestamp from the `.metadata.component.properties` array.
+    
+    TODO THIS APPEARS TO BE BROKEN
     """
     try:
 
