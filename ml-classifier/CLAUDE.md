@@ -51,7 +51,7 @@ This is an ML classifier for container image supply chain risk assessment. The p
 - Parses CycloneDX JSON SBOMs and extracts a fixed-length `SecurityMetric` feature vector
 - Features: `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`, `semgrep_total`, `semgrep_high_count`, `base_image_age_days`
 - `semgrep_total` and `semgrep_high_count` are currently passed in externally (defaulting to 0 in the CLI); SAST integration is not yet implemented
-- `base_image_age_days` extraction has a known TODO: it relies on the `aquasecurity:trivy:Labels:build-date` property which is not present in all images; returns `0.0` when missing
+- `base_image_age_days` uses a two-tier extraction strategy: (1) a label fallback chain checks `aquasecurity:trivy:Labels:build-date`, `org.opencontainers.image.created`, `org.label-schema.build-date`, and `com.docker.dhi.created` in `.metadata.component.properties`; (2) if no label resolves, the Docker Hub public API is queried using `aquasecurity:trivy:Reference` (5-second timeout, gracefully falls back to `0.0` on failure). Images where the tag was republished after the scan was taken will still return `0.0`.
 - The `SecurityMetricsCollection` wraps multiple `SecurityMetric` objects into a pandas DataFrame and exports to CSV or JSON
 - Severity ratings use the highest rating across all sources per vulnerability (not NVD-only)
 - Top 25 CWEs reference the MITRE 2025 list hardcoded in `TOP_25_CWES`
