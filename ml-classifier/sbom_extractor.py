@@ -1,6 +1,8 @@
 from json import load, dumps
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace, ArgumentTypeError
-from typing import Dict, Any, Generator, List, Set, Union
+from typing import Dict, Any, Generator, List, Set, Union, Optional
+from urllib.request import urlopen
+from urllib.error import URLError
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +31,15 @@ SEVERITY_WEIGHT:Dict[str, int] = {
     "none": 0,
     "unknown": 0
 }
+
+# Define a series of fallback labels that may allow the date extraction
+# for the each containers age
+_LABEL_FALLBACK_CHAIN: List[str] = [
+    "aquasecurity:trivy:Labels:build-date",
+    "aquasecurity:trivy:Labels:org.opencontainers.image.created",
+    "aquasecurity:trivy:Labels:org.label-schema.build-date",
+    "aquasecurity:trivy:Labels:com.docker.dhi.created",
+]
 
 @dataclass
 class SecurityMetric:
@@ -293,30 +304,44 @@ def extract_base_image_days(sbom: Dict[str, Any]) -> float:
     - A high age indicates that the project is not regularly ingesting upstream security patches and updates.
 
     **WHERE:**
-    - The `base_image_age_days` is derived by extracting the creation timestamp from the `.metadata.component.properties` array.
-    
-    TODO THIS APPEARS TO BE BROKEN
+    - Tier 1: label fallback chain from `.metadata.component.properties`
+    - Tier 2: Docker Hub public API using the image reference from properties
     """
     try:
-
-        # Find the build date from the metadata        
         properties = sbom.get("metadata", {}).get("component", {}).get("properties", [])
-        build_date_str = None
-        for prop in properties:
-            if prop.get("name") == "aquasecurity:trivy:Labels:build-date":
-                build_date_str = prop.get("value")
-                break
-        if not build_date_str:
-            return 0.0
+        prop_map: Dict[str, str] = {p.get("name", ""): p.get("value", "") for p in properties}
 
-        # Find the scan data from the metadata
+        # Determine scan time
         scan_timestamp_str = sbom.get("metadata", {}).get("timestamp")
-        if scan_timestamp_str: scan_time:datetime = datetime.strptime(scan_timestamp_str[:19], "%Y-%m-%dT%H:%M:%S")
-        else:                  scan_time:datetime = datetime.now()
-        build_date = datetime.strptime(build_date_str[:19], "%Y-%m-%dT%H:%M:%S")
-        delta = scan_time - build_date
-        return float(max(0, delta.days))
-    
+        scan_time: datetime = (
+            datetime.strptime(scan_timestamp_str[:19], "%Y-%m-%dT%H:%M:%S")
+            if scan_timestamp_str
+            else datetime.now()
+        )
+
+        # Tier 1 — label fallback chain
+        build_date_str = None
+        for label in _LABEL_FALLBACK_CHAIN:
+            if label in prop_map and prop_map[label]:
+                build_date_str = prop_map[label]
+                break
+
+        if build_date_str:
+            build_date = _parse_date_flexible(build_date_str)
+            if build_date:
+                return float(max(0, (scan_time - build_date).days))
+
+        # Tier 2 — Docker Hub API fallback
+        reference = prop_map.get("aquasecurity:trivy:Reference", "")
+        if reference:
+            hub_date_str = _query_dockerhub_tag_date(reference)
+            if hub_date_str:
+                hub_date = _parse_date_flexible(hub_date_str)
+                if hub_date:
+                    return float(max(0, (scan_time - hub_date).days))
+
+        return 0.0
+
     except Exception as e:
         raise RuntimeError(f"Failed to extract base_image_age_days: {e}")
 
@@ -345,6 +370,50 @@ def _get_highest_score(ratings: List[Dict[str, Any]]) -> float:
         except (ValueError, TypeError):
             continue
     return max_score
+
+def _parse_date_flexible(date_str: str) -> Optional[datetime]:
+    """Parse a date string in any of the formats observed in the scan corpus."""
+    # Normalise: strip trailing Z, then truncate at + or . to get bare datetime
+    s = date_str.strip()
+    if s.endswith("Z"):
+        s = s[:-1]
+    # Drop sub-second precision and timezone offset
+    s = s.split(".")[0].split("+")[0]
+
+    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%Y%m%d"]:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return None
+
+def _query_dockerhub_tag_date(reference: str) -> Optional[str]:
+    """Query Docker Hub public API for the last_updated timestamp of a tag."""
+    try:
+        # Parse reference: [registry/][namespace/]image[:tag]
+        # Strip any registry prefix (contains a dot or colon with port)
+        parts = reference.split("/")
+        if len(parts) >= 2 and ("." in parts[0] or ":" in parts[0]):
+            parts = parts[1:]  # drop registry host
+
+        if len(parts) == 1:
+            namespace = "library"
+            image_and_tag = parts[0]
+        else:
+            namespace = parts[0]
+            image_and_tag = "/".join(parts[1:])
+
+        if ":" in image_and_tag:
+            image, tag = image_and_tag.rsplit(":", 1)
+        else:
+            image, tag = image_and_tag, "latest"
+
+        url = f"https://hub.docker.com/v2/repositories/{namespace}/{image}/tags/{tag}"
+        with urlopen(url, timeout=5) as resp:
+            data = load(resp)
+            return data.get("last_updated")
+    except (URLError, Exception):
+        return None
 
 def build_security_metric_from_sbom(
     scan_file:str,
