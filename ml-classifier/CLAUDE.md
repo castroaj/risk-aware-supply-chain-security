@@ -25,6 +25,9 @@ python sbom_extractor.py -s <path/to/sbom-dir/> -f csv
 
 # Write output to a file instead of stdout
 python sbom_extractor.py -s <path/to/sbom.json> -f csv -o output.csv
+
+# Append ALLOW/WARN/BLOCK classification column to the output
+python sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 ```
 
 ## Generating SBOM Scan Data
@@ -39,13 +42,22 @@ python sbom_extractor.py -s <path/to/sbom.json> -f csv -o output.csv
 
 Image lists are in `training-set-generation/image-lists/` as CSV files with format `image:tag,output-filename.json`. Three classification buckets exist: `high-qual.csv`, `aged-stale.csv`, `known-vuln.csv`.
 
+## Computing Dataset Statistics
+
+```bash
+# Print per-feature min/median/mean/max for all three training buckets
+python training-set-classification/compute_statistics.py
+```
+
+Full statistical analysis, feature rubric rationale, and threshold derivations are documented in `training-set-classification/dataset-statistics.md`.
+
 ## Architecture
 
-This is an ML classifier for container image supply chain risk assessment. The pipeline has two stages:
+This is an ML classifier for container image supply chain risk assessment. The pipeline has three stages:
 
 **Stage 1 — Training Data Generation** (`training-set-generation/`)
 - Uses [Trivy](https://github.com/aquasecurity/trivy) to scan Docker images and produce CycloneDX-format SBOM JSON files
-- Pre-scanned results are stored in `high-qual-vuln-scan/`, `aged-stale-vuln-scan/`, and `list-vuln-scan/` subdirectories, corresponding to the three training labels
+- Pre-scanned results are stored in `training-set-classification/high-qual-vuln-scan/`, `training-set-classification/aged-stale-vuln-scan/`, and `training-set-classification/known-vuln-scan/`, corresponding to the three training labels
 
 **Stage 2 — Feature Extraction** (`sbom_extractor.py`)
 - Parses CycloneDX JSON SBOMs and extracts a fixed-length `SecurityMetric` feature vector
@@ -55,3 +67,9 @@ This is an ML classifier for container image supply chain risk assessment. The p
 - The `SecurityMetricsCollection` wraps multiple `SecurityMetric` objects into a pandas DataFrame and exports to CSV or JSON
 - Severity ratings use the highest rating across all sources per vulnerability (not NVD-only)
 - Top 25 CWEs reference the MITRE 2025 list hardcoded in `TOP_25_CWES`
+
+**Stage 3 — Rule-Based Classification** (`sbom_extractor.py`)
+- `BLOCK_THRESHOLDS` and `WARN_THRESHOLDS` module-level constants define per-feature cutoffs; BLOCK is evaluated before WARN and any single breach returns that verdict
+- `classify_metric(metric: SecurityMetric) -> str` is a public function that returns `"BLOCK"`, `"WARN"`, or `"ALLOW"`; can be called programmatically independent of the CLI
+- `-c / --classify` CLI flag appends a `classification` column to the output; works with both CSV and JSON formats
+- Threshold values and feature selection rationale are documented in `training-set-classification/dataset-statistics.md`

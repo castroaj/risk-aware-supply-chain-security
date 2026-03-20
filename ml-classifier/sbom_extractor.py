@@ -32,6 +32,23 @@ SEVERITY_WEIGHT:Dict[str, int] = {
     "unknown": 0
 }
 
+# Threshold constants for rule-based classification.
+# Keys match SecurityMetric field names exactly.
+# BLOCK is evaluated before WARN. Any single breach triggers that level.
+BLOCK_THRESHOLDS: Dict[str, float] = {
+    "critical_cve_count":  50.0,
+    "top25_cwe_count":     150.0,
+    "base_image_age_days": 2000.0,
+}
+
+WARN_THRESHOLDS: Dict[str, float] = {
+    "critical_cve_count":  10.0,
+    "cvss_ge_7_count":     100.0,
+    "unique_cwe_count":    40.0,
+    "top25_cwe_count":     50.0,
+    "base_image_age_days": 365.0,
+}
+
 # Define a series of fallback labels that may allow the date extraction
 # for the each containers age
 _LABEL_FALLBACK_CHAIN: List[str] = [
@@ -415,6 +432,22 @@ def _query_dockerhub_tag_date(reference: str) -> Optional[str]:
     except (URLError, Exception):
         return None
 
+def classify_metric(metric: SecurityMetric) -> str:
+    """
+    Applies BLOCK_THRESHOLDS then WARN_THRESHOLDS to a SecurityMetric.
+    Returns "BLOCK", "WARN", or "ALLOW".
+
+    Can be called independently of the CLI for programmatic use.
+    """
+    values = metric.__dict__
+    for field, threshold in BLOCK_THRESHOLDS.items():
+        if values.get(field, 0.0) >= threshold:
+            return "BLOCK"
+    for field, threshold in WARN_THRESHOLDS.items():
+        if values.get(field, 0.0) >= threshold:
+            return "WARN"
+    return "ALLOW"
+
 def build_security_metric_from_sbom(
     scan_file:str,
     sbom:Dict[str, Any],
@@ -518,6 +551,13 @@ def parse_args() -> Namespace:
         type=validate_output_path,
         help="File path to redirect the output to a CSV or JSON file"
     )
+    parser.add_argument(
+        "-c",
+        "--classify",
+        action="store_true",
+        default=False,
+        help="Append a 'classification' column (ALLOW/WARN/BLOCK) to the output"
+    )
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -531,6 +571,11 @@ if __name__ == "__main__":
             semgrep_total=0
         ))
     
+    if args.classify and not metrics.df.empty:
+        metrics.df["classification"] = metrics.df.apply(
+            lambda row: classify_metric(SecurityMetric(**row.to_dict())), axis=1
+        )
+
     if args.format == CSV_OUTPUT:
         output_data = metrics.to_csv()
     else:
