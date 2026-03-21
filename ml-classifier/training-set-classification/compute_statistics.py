@@ -18,7 +18,7 @@ SBOM_EXTRACTOR = HERE.parent / "sbom_extractor.py"
 features = [
     "total_dependency_count", "vuln_total", "critical_cve_count", "high_cve_count",
     "cvss_ge_7_count", "max_cvss", "unique_cwe_count", "top25_cwe_count",
-    "semgrep_total", "semgrep_high_count", "base_image_age_days"
+    "base_image_age_days"
 ]
 
 for label, path in buckets.items():

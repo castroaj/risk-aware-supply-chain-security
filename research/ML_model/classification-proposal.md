@@ -64,7 +64,7 @@ Example features include:
   - `max_cvss`
   - `unique_cwe_count`
   - `top25_cwe_count`
-- SAST Scan (Semgrep)
+- SAST Scan (Semgrep) — *deferred; removed from current implementation scope (Use Case A)*
   - `semgrep_total`
   - `semgrep_high_count`
 - Build Metadata (container)

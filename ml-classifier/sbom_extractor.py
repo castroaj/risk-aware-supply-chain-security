@@ -75,8 +75,6 @@ class SecurityMetric:
     max_cvss: float
     unique_cwe_count: float
     top25_cwe_count: float
-    semgrep_total: float
-    semgrep_high_count: float
     base_image_age_days: float
 
     def to_json(self) -> str:
@@ -88,7 +86,6 @@ class SecurityMetric:
             f"{self.critical_cve_count},{self.high_cve_count},"
             f"{self.cvss_ge_7_count},{self.max_cvss},"
             f"{self.unique_cwe_count},{self.top25_cwe_count},"
-            f"{self.semgrep_total},{self.semgrep_high_count},"
             f"{self.base_image_age_days}"
         )
 
@@ -97,8 +94,7 @@ class SecurityMetric:
         return (
             "scan_file,total_dependency_count,vuln_total,critical_cve_count,"
             "high_cve_count,cvss_ge_7_count,max_cvss,unique_cwe_count,"
-            "top25_cwe_count,semgrep_total,semgrep_high_count,"
-            "base_image_age_days"
+            "top25_cwe_count,base_image_age_days"
         )
 
 @dataclass
@@ -451,12 +447,9 @@ def classify_metric(metric: SecurityMetric) -> str:
 def build_security_metric_from_sbom(
     scan_file:str,
     sbom:Dict[str, Any],
-    semgrep_total: float,
-    semgrep_high_count: float,
 ) -> SecurityMetric:
     """
-    Ingests a Trivy CycloneDX JSON SBOM and external SAST/Metadata 
-    to create a formalized SecurityMetric vector.
+    Ingests a Trivy CycloneDX JSON SBOM to create a formalized SecurityMetric vector.
     """
     try:
         return SecurityMetric(
@@ -469,8 +462,6 @@ def build_security_metric_from_sbom(
             max_cvss=extract_max_cvss(sbom),
             unique_cwe_count=extract_unique_cwe_count(sbom),
             top25_cwe_count=extract_top25_cwe_count(sbom),
-            semgrep_total=semgrep_total,
-            semgrep_high_count=semgrep_high_count,
             base_image_age_days=extract_base_image_days(sbom)
         )
     except Exception as e:
@@ -567,8 +558,6 @@ if __name__ == "__main__":
         metrics.append(build_security_metric_from_sbom(
             scan_file=path.name,
             sbom=sbom,
-            semgrep_high_count=0,
-            semgrep_total=0
         ))
     
     if args.classify and not metrics.df.empty:

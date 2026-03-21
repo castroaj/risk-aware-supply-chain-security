@@ -60,10 +60,10 @@ The classifier operates on **structured feature vectors** extracted from tool ou
 | `WARN`/`BLOCK` candidates | `training-set-classification/aged-stale-vuln-scan/` | `training-set-generation/image-lists/aged-stale.csv` |
 | `BLOCK` candidates | `training-set-classification/known-vuln-scan/` | `training-set-generation/image-lists/known-vuln.csv` |
 
-**Feature vector** (11 features, all from CycloneDX JSON produced by Trivy):
+**Feature vector** (9 features, all from CycloneDX JSON produced by Trivy):
 - `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`
-- `semgrep_total`, `semgrep_high_count` — externally injected (default 0; Semgrep integration not yet built)
 - `base_image_age_days` — two-tier: label fallback chain → Docker Hub public API
+- SAST features (`semgrep_total`, `semgrep_high_count`) are deferred from the current scope; see `research/ML_model/semgrep-feature-analysis.md` for rationale
 
 **Classification** is currently rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` constants in `sbom_extractor.py`). The Decision Tree model training step has not been implemented yet. Threshold rationale is in `ml-classifier/training-set-classification/dataset-statistics.md`.
 

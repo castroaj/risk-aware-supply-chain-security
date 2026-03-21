@@ -22,8 +22,6 @@ Run `training-set-generation/compute_statistics.py` from the `ml-classifier/` di
 | `max_cvss` | 0.0 | 9.8 | 8.8 | 10.0 |
 | `unique_cwe_count` | 0.0 | 17.0 | 24.5 | 127.0 |
 | `top25_cwe_count` | 0.0 | 8.0 | 74.3 | 1509.0 |
-| `semgrep_total` | 0.0 | 0.0 | 0.0 | 0.0 |
-| `semgrep_high_count` | 0.0 | 0.0 | 0.0 | 0.0 |
 | `base_image_age_days` | 0.0 | 47.0 | 262.9 | 779.0 |
 
 ### aged-stale (WARN) — n = 55
@@ -38,8 +36,6 @@ Run `training-set-generation/compute_statistics.py` from the `ml-classifier/` di
 | `max_cvss` | 0.0 | 10.0 | 9.3 | 10.0 |
 | `unique_cwe_count` | 0.0 | 89.0 | 96.6 | 199.0 |
 | `top25_cwe_count` | 0.0 | 133.0 | 590.5 | 2666.0 |
-| `semgrep_total` | 0.0 | 0.0 | 0.0 | 0.0 |
-| `semgrep_high_count` | 0.0 | 0.0 | 0.0 | 0.0 |
 | `base_image_age_days` | 641.0 | 1627.0 | 1599.7 | 2210.0 |
 
 ### known-vuln (BLOCK) — n = 31
@@ -54,8 +50,6 @@ Run `training-set-generation/compute_statistics.py` from the `ml-classifier/` di
 | `max_cvss` | 0.0 | 10.0 | 9.7 | 10.0 |
 | `unique_cwe_count` | 0.0 | 75.0 | 75.1 | 161.0 |
 | `top25_cwe_count` | 0.0 | 166.0 | 202.8 | 699.0 |
-| `semgrep_total` | 0.0 | 0.0 | 0.0 | 0.0 |
-| `semgrep_high_count` | 0.0 | 0.0 | 0.0 | 0.0 |
 | `base_image_age_days` | 0.0 | 2683.0 | 2460.6 | 3392.0 |
 
 ---
@@ -80,15 +74,6 @@ Run `training-set-generation/compute_statistics.py` from the `ml-classifier/` di
 | `vuln_total` | High correlation with `critical_cve_count`. Dominated by low/medium-severity findings. Using both double-counts the same underlying risk; `critical_cve_count` is more specific. |
 | `high_cve_count` | Correlated with both `critical_cve_count` and `cvss_ge_7_count`. Adding it would cause false WARN promotions for high-qual images without adding orthogonal signal. |
 | `max_cvss` | Near-useless discriminator: ALLOW median = 9.8, WARN = 10.0, BLOCK = 10.0. A single unpatched critical CVE anywhere pushes this to maximum. Cannot distinguish one critical CVE from 500. |
-| `semgrep_total` | Always 0 — SAST integration not yet implemented. A permanently-zero threshold is a no-op. Add to rubric once SAST data is available. |
-| `semgrep_high_count` | Same reason as `semgrep_total`. |
-
-### Candidate for removal (do not remove without explicit instruction)
-
-`semgrep_total` and `semgrep_high_count` are candidates for removal from
-`SecurityMetric` until SAST is implemented — they currently add two columns of
-zeros to every output, creating the appearance of SAST coverage where none
-exists.  Deferred to avoid breaking downstream CSV consumers.
 
 ---
 
