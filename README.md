@@ -33,6 +33,16 @@
   - [Feature Extraction](./research/ML_model/feature-extraction.md)
   - [Training Data Generation Plan](./research/ML_model/training-data-generation-plan.md)
 
+## ML Classifier
+
+The `ml-classifier/` directory contains the active implementation of the pipeline's risk classification stage.
+
+- Scans container images with Trivy to produce CycloneDX JSON SBOMs
+- Extracts a 9-feature vector from each SBOM: vulnerability counts, CVSS scores, CWE coverage, and base image age
+- Classifies each image as ALLOW, WARN, or BLOCK using a rule-based threshold classifier
+- Maintains three pre-scanned training buckets corresponding to the three classification labels
+- Decision Tree model training is planned but not yet implemented
+
 ## Software Prototype
 
 TODO
