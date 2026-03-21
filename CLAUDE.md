@@ -46,9 +46,15 @@ python src/sbom_extractor.py -s data/scans/high-qual/ -f csv -c
     data/image-lists/high-qual.csv \
     data/scans/high-qual/
 
+# Scan all three training buckets (sequential default, or parallel with -p)
+./scripts/scan_all.sh data/scans/
+./scripts/scan_all.sh -p data/scans/
+
 # Print dataset statistics across all three training buckets
 python analysis/compute_statistics.py
 ```
+
+> **Docker Hub prerequisite:** All scan scripts pull images via Trivy and require `docker login` before running. Personal authenticated accounts are capped at **200 pulls per 6-hour window** — a hard constraint when scaling up image lists or using `-p` / `--parallel`.
 
 ## ML Pipeline Architecture
 
