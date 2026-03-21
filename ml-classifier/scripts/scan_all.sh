@@ -11,6 +11,16 @@
 #                    Each bucket's output is captured in <output-dir>/<bucket>/scan.log.
 #   <output-dir>     Required. Root directory for scan results. The three
 #                    bucket sub-directories are created automatically.
+#
+# Prerequisites:
+#   Trivy pulls images from Docker Hub. You must be logged in before running:
+#     docker login
+#
+# Rate-limit warning:
+#   A personal authenticated Docker Hub account allows 200 pulls per 6-hour
+#   window. Use -p / --parallel with caution — all three buckets pull
+#   concurrently, which can exhaust the quota faster than sequential mode.
+#   Exceeding the limit will cause Trivy pulls to fail mid-scan.
 
 set -uo pipefail
 
