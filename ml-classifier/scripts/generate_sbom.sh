@@ -51,11 +51,26 @@ run_trivy_scan_from_csv() {
         return 1
     fi
 
+    # Count non-empty lines so we can report [N/total] progress
+    local total
+    total=$(grep -c '[^[:space:]]' "$CSV_FILE" || true)
+
+    local index=0
+    local failed=0
     while IFS=',' read -r image output_file || [[ -n "$image" ]]; do
         if [[ -n "$image" ]] && [[ -n "$output_file" ]]; then
-            run_trivy_scan "$image" "$OUTPUT_DIRECTORY/$output_file"
+            index=$(( index + 1 ))
+            echo "[$index/$total] Scanning $image ..."
+            if run_trivy_scan "$image" "$OUTPUT_DIRECTORY/$output_file"; then
+                echo "[$index/$total] OK: $image"
+            else
+                echo "[$index/$total] FAILED: $image" >&2
+                failed=1
+            fi
         fi
     done < "$CSV_FILE"
+
+    return $failed
 }
 
 if [[ "$1" == "GENERATE_SBOM" ]]; then
