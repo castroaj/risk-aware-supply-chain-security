@@ -8,12 +8,12 @@ from pathlib import Path
 HERE = Path(__file__).parent
 
 buckets: dict[str, Path] = {
-    "high-qual":  HERE / "high-qual-vuln-scan/",
-    "aged-stale": HERE / "aged-stale-vuln-scan/",
-    "known-vuln": HERE / "known-vuln-scan/",
+    "high-qual":  HERE.parent / "data" / "scans" / "high-qual",
+    "aged-stale": HERE.parent / "data" / "scans" / "aged-stale",
+    "known-vuln": HERE.parent / "data" / "scans" / "known-vuln",
 }
 
-SBOM_EXTRACTOR = HERE.parent / "sbom_extractor.py"
+SBOM_EXTRACTOR = HERE.parent / "src" / "sbom_extractor.py"
 
 features = [
     "total_dependency_count", "vuln_total", "critical_cve_count", "high_cve_count",

@@ -4,7 +4,7 @@ Statistics computed from the three classification buckets used to calibrate the
 rule-based rubric in `sbom_extractor.py`.  All values are rounded to one decimal
 place.  `n` is the number of scanned images per bucket.
 
-Run `training-set-generation/compute_statistics.py` from the `ml-classifier/` directory to reproduce.
+Run `analysis/compute_statistics.py` from the `ml-classifier/` directory to reproduce.
 
 ---
 

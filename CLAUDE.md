@@ -12,9 +12,10 @@ The goal is a GitHub Actions CI/CD pipeline that runs SBOM generation, vulnerabi
 
 ```
 ml-classifier/          # Only active code — feature extraction, classification, training data
-  sbom_extractor.py     # Core feature extraction + rule-based classification CLI
-  training-set-generation/   # Trivy scan scripts and image lists (CSV)
-  training-set-classification/  # Pre-scanned SBOM JSON files and statistics script
+  src/sbom_extractor.py # Core feature extraction + rule-based classification CLI
+  scripts/              # Trivy scan scripts
+  data/                 # Image lists (CSV) and pre-scanned SBOM JSON files
+  analysis/             # Statistics script and dataset analysis docs
   requirements.txt / setup.sh / CLAUDE.md
 research/               # Design research docs (SBOM, SAST, dynamic scanning, ML model)
 documentation/          # SRS, design diagrams, meeting notes
@@ -32,21 +33,21 @@ cd ml-classifier
 ./setup.sh && source .venv/bin/activate
 
 # Run feature extractor on a single SBOM file
-python sbom_extractor.py -s <path/to/sbom.json>
+python src/sbom_extractor.py -s <path/to/sbom.json>
 
 # Extract + classify an entire directory, output CSV
-python sbom_extractor.py -s training-set-classification/high-qual-vuln-scan/ -f csv -c
+python src/sbom_extractor.py -s data/scans/high-qual/ -f csv -c
 
 # Scan a Docker image (requires trivy + sudo)
-./training-set-generation/generate_sbom.sh GENERATE_SBOM <image:tag> <output.json>
+./scripts/generate_sbom.sh GENERATE_SBOM <image:tag> <output.json>
 
 # Scan all images in a list CSV
-./training-set-generation/generate_sbom.sh GENERATE_SBOM_FROM_LIST \
-    training-set-generation/image-lists/high-qual.csv \
-    training-set-classification/high-qual-vuln-scan/
+./scripts/generate_sbom.sh GENERATE_SBOM_FROM_LIST \
+    data/image-lists/high-qual.csv \
+    data/scans/high-qual/
 
 # Print dataset statistics across all three training buckets
-python training-set-classification/compute_statistics.py
+python analysis/compute_statistics.py
 ```
 
 ## ML Pipeline Architecture
@@ -56,16 +57,16 @@ The classifier operates on **structured feature vectors** extracted from tool ou
 **Three training label buckets** (each has a pre-scanned JSON directory and an image-list CSV):
 | Label bucket | Directory | Image list CSV |
 |---|---|---|
-| `ALLOW` candidates | `training-set-classification/high-qual-vuln-scan/` | `training-set-generation/image-lists/high-qual.csv` |
-| `WARN`/`BLOCK` candidates | `training-set-classification/aged-stale-vuln-scan/` | `training-set-generation/image-lists/aged-stale.csv` |
-| `BLOCK` candidates | `training-set-classification/known-vuln-scan/` | `training-set-generation/image-lists/known-vuln.csv` |
+| `ALLOW` candidates | `data/scans/high-qual/` | `data/image-lists/high-qual.csv` |
+| `WARN`/`BLOCK` candidates | `data/scans/aged-stale/` | `data/image-lists/aged-stale.csv` |
+| `BLOCK` candidates | `data/scans/known-vuln/` | `data/image-lists/known-vuln.csv` |
 
 **Feature vector** (9 features, all from CycloneDX JSON produced by Trivy):
 - `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`
 - `base_image_age_days` — two-tier: label fallback chain → Docker Hub public API
 - SAST features (`semgrep_total`, `semgrep_high_count`) are deferred from the current scope; see `research/ML_model/semgrep-feature-analysis.md` for rationale
 
-**Classification** is currently rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` constants in `sbom_extractor.py`). The Decision Tree model training step has not been implemented yet. Threshold rationale is in `ml-classifier/training-set-classification/dataset-statistics.md`.
+**Classification** is currently rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` constants in `src/sbom_extractor.py`). The Decision Tree model training step has not been implemented yet. Threshold rationale is in `ml-classifier/analysis/dataset-statistics.md`.
 
 ## Key Design Decisions
 
