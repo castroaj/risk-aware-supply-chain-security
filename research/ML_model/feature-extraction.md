@@ -160,6 +160,14 @@ The following features are derived from the `vulnerabilities` section of the SBO
 
 ## SAST Scan Features
 
+> **Deferred — out of scope for current implementation.** `semgrep_total` and
+> `semgrep_high_count` have been removed from the active feature vector in
+> `sbom_extractor.py`. SAST requires source code, which is unavailable for the
+> pre-built public Docker images used in the current training pipeline (Use Case A).
+> These features are retained here as the design specification for a future
+> first-party build pipeline (Use Case B). See
+> `research/ML_model/semgrep-feature-analysis.md` for full rationale.
+
 The following features are derived from the `results` section of the SemGrep output JSON file produced by the [`semgrep/semgrep`](https://github.com/semgrep/semgrep) tool
 
 ### SemGrep Total

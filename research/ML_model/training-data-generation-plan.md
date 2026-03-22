@@ -35,7 +35,7 @@ The data generation process will mirror what the production actions workflow. A 
    - Clone the exact git commit/tag of the source repository corresponding to that image.
 2. **Generate Scanning Artifacts**:
    - Runs a trivy scan for SBOM/Vulnerability data on open source image
-   - Runs SemGrep on open-source software
+   - Runs SemGrep on open-source software *(deferred — SAST is out of scope for the current Use Case A pipeline; see `research/ML_model/semgrep-feature-analysis.md`)*
 3. **Feature Extraction**:
    - Parse the artifacts from the scanning phase into a structured feature vector identified by its source artifacts
 4. **Labeling**:
