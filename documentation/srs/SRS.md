@@ -226,6 +226,17 @@ The ML classifier shall:
 - Log the input feature vector used for classification.
 - Support traceability of feature contributions used in classification for audit review.
 
+### Implementation Note (Initial Phase)
+
+The system shall initially use a rule-based classification mechanism to support
+early-stage decision enforcement and training data generation.
+
+This rule-based approach applies predefined thresholds on extracted security
+features to classify builds into ALLOW, WARN, or BLOCK categories.
+
+In later phases, this mechanism will be replaced or augmented by a machine
+learning-based classifier trained on labeled build data.
+
 ---
 
 ## FR-8 Deployment Enforcement
@@ -280,6 +291,41 @@ All retained artifacts must support audit traceability.
 The system shall extract security-relevant statistics from SBOM, vulnerability,
 and SAST outputs and normalize them into a fixed feature vector schema
 for ML classification.
+
+### Feature Vector Definition (Initial)
+
+The system shall extract the following features (initial set):
+
+- total_dependency_count
+- vuln_total
+- critical_cve_count
+- high_cve_count
+- cvss_ge_7_count
+- max_cvss
+- unique_cwe_count
+- top25_cwe_count
+- semgrep_total (optional)
+- semgrep_high_count (optional)
+- base_image_age_days
+
+Notes:
+- Semgrep-derived features are marked optional. See `research/semgrep/semgrep_feature_analysis.md` (or `semgrep_feature_analysis.md`) for the project's semgrep feature analysis and rationale for excluding semgrep features from the default feature vector in early experiments. Semgrep features may be enabled as an opt-in augmentation if desired.
+
+### Training Data Labeling
+
+The system shall use a rule-based threshold mechanism to generate initial labels (ALLOW, WARN, BLOCK) for training data generation. This deterministic, rule-based labeling strategy will be used to:
+
+- Produce labeled examples for initial model training.
+- Provide a transparent, explainable baseline for enforcement during early development.
+- Capture the labeling rules and thresholds in version-controlled configuration so they are auditable and adjustable over time.
+
+The labeling mechanism shall be configurable, and the project team will document the rule set used to generate labels. Example (illustrative) rules that may be used when labeling training data include:
+
+- BLOCK: when critical_cve_count >= 1 OR max_cvss >= 9.0
+- WARN: when cvss_ge_7_count > 0 OR high_cve_count > 0 (but does not meet BLOCK criteria)
+- ALLOW: when none of the WARN or BLOCK criteria are met
+
+These example thresholds are illustrative; the actual rule set and numeric thresholds used to generate training labels must be recorded in the project's training-data generation documentation and version control.
 
 ---
 
@@ -369,7 +415,16 @@ ML-based decisions must remain explainable and traceable for governance validati
 
 ---
 
-## 5. Document Status and Evolution
+## NFR-9 Explainability
+
+The system shall provide explainable classification outputs.
+
+For each classification decision, the system should be able to identify:
+
+- Which features contributed to the decision  
+- Which thresholds or conditions were triggered  
+
+This is required to support auditability and compliance validation.
 
 This SRS is a living project document and will be continuously updated throughout
 Phases 1–5 of the capstone.
@@ -399,4 +454,3 @@ The following sections will be expanded incrementally as the system matures:
 ---
 
 **End of Current Draft — Under Active Development**
-
