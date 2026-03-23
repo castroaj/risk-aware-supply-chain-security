@@ -135,39 +135,3 @@ Alternative approaches that reduce manual burden at scale exist:
 
 Neither alternative eliminates the core requirement for some independent ground-truth labels. The
 scaling constraint removes the last viable path to obtaining those labels within this project's scope.
-
----
-
-## Decision
-
-The rule-based threshold system is the permanent classifier for this project. The Decision Tree
-training step is not implemented.
-
-Justification (cumulative):
-
-1. Feature separations in the training data are sufficiently clean for axis-aligned thresholds to
-   perform well without learned splits.
-2. The circular labeling problem makes any DT trained on rule-derived labels a rule approximator,
-   not an independent classifier — defeating the purpose.
-3. Obtaining independent ground-truth labels is feasible at current dataset size but becomes
-   operationally infeasible at the scale required for a DT to generalize reliably.
-4. Auditability and compliance requirements favor explicit, citable thresholds over a model artifact.
-5. The human-in-the-loop override loop feeds back into periodic threshold recalibration, preserving
-   the governance feedback mechanism without a retraining pipeline.
-
----
-
-## Implications for Future Work
-
-- **Threshold recalibration** should be triggered by accumulated override events and driven by
-  updated statistical analysis using `compute_statistics.py`.
-- **Compound-signal failure mode** remains unaddressed. If false negatives (incorrect ALLOW) on
-  multi-feature boundary cases become observable in production overrides, introducing a small
-  set of explicit compound rules (e.g., `if A ≥ x AND B ≥ y → WARN`) is preferred over
-  introducing a learned model.
-- **Semgrep reintegration** (`semgrep_total`, `semgrep_high_count`) should be handled by extending
-  the threshold constants, not by adding a DT layer. Threshold derivation methodology is the same
-  as documented in `dataset-statistics.md`.
-- If a future project phase obtains **independently reviewed ground-truth labels** for a sufficiently
-  large dataset, the DT training path described in the original proposal remains architecturally
-  sound and the existing feature extraction pipeline is compatible with it.
