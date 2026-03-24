@@ -8,7 +8,7 @@
 - [Project Plan](./documentation/project-plan/) - Project plan document, covering what the project aims to cover and how it plans to do so
 - [SRS Document](./documentation/srs/) - Official documentation for the project including scope, design, and requirements
 
-## Software Prototype
+## Research
 
 [Software Bill of Materials (SBOM)](./research/sbom/README.md)
 - Research into SBOM generation, management, and standards (NTIA) for Python and Docker environments
