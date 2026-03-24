@@ -1,0 +1,26 @@
+# SAST Overview and Tool Evaluation
+
+Static Application Security Testing (SAST) is a core component of modern secure software development that analyzes source code, bytecode, or binaries without executing the application. By identifying vulnerabilities early in the software development lifecycle, SAST supports the “shift-left” security model and enables developers to remediate issues before deployment. This approach reduces remediation costs, improves code quality, and provides evidence of secure development practices required by modern compliance frameworks and government guidance.
+
+Within secure CI/CD pipelines, SAST is typically combined with Software Bill of Materials (SBOM) generation and vulnerability scanning to create machine-readable security artifacts. These artifacts help organizations demonstrate compliance with secure software supply-chain requirements such as those outlined in Executive Order 14028 and the NIST Secure Software Development Framework (SSDF). Modern pipelines therefore require tools that can generate SBOMs, perform static code analysis, scan dependencies, and output standardized formats such as SARIF, JSON, SPDX, or CycloneDX for auditing and automation purposes.
+
+This research examined several categories of tools commonly used in risk-aware CI/CD environments:
+
+1. Integrated vulnerability and SBOM tools
+Tools such as Trivy provide combined functionality for vulnerability scanning and SBOM generation. These tools reference multiple vulnerability data sources and continuously update their databases to ensure accurate detection. They support widely accepted SBOM formats (e.g., SPDX and CycloneDX) and produce outputs suitable for automated pipeline gating and compliance evidence.
+
+2. SBOM generation tools
+SBOM-focused tools such as Syft generate machine-readable inventories of software components. While they do not perform static analysis themselves, they are essential for software supply-chain transparency and can be integrated with vulnerability scanners to identify risks in dependencies.
+ 
+3. SBOM-based vulnerability scanners
+Tools like Grype analyze SBOMs or container images to identify known vulnerabilities using databases such as the National Vulnerability Database (NVD), GitHub Advisory Database, and operating-system-specific feeds. These tools provide structured outputs that can be used in automated risk evaluation and compliance reporting.
+
+4. Static code analysis tools (SAST)
+Static analysis tools such as Semgrep and CodeQL analyze application code for security weaknesses including injection flaws, insecure cryptography, and hardcoded credentials. These tools typically output results in SARIF or JSON formats, allowing integration into CI/CD systems and aggregation into broader risk-scoring models.
+
+5. Continuous monitoring and dependency-tracking tools
+Platforms like OWASP Dependency-Track ingest SBOMs and provide ongoing monitoring of vulnerabilities in software components. These tools support continuous risk assessment and help maintain compliance over time by tracking newly disclosed vulnerabilities affecting deployed software.
+ 
+Across these categories, the tools evaluated demonstrate that no single solution provides complete coverage. Instead, effective secure pipelines combine multiple tools to generate SBOMs, perform static analysis, and scan dependencies. Research also shows that SAST tools vary in detection accuracy and may miss certain vulnerabilities or produce false positives, reinforcing the need for layered security testing and automated risk evaluation.
+
+Overall, the evaluation highlights that SAST remains a critical but incomplete security control. When integrated with SBOM generation, vulnerability intelligence, and standardized reporting formats, these tools collectively support a risk-aware CI/CD pipeline capable of producing verifiable security evidence and improving software supply-chain integrity.
