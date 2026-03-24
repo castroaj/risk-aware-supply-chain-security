@@ -2,3 +2,16 @@
 __pycache__
 *vuln-scan/
 ml-classifier/data/scans/
+
+software-prototype/.venv/
+software-prototype/dist/
+software-prototype/build/
+software-prototype/*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

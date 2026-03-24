@@ -1,0 +1,144 @@
+# Software Prototype
+
+This is the skeleton for the Risk-Aware Compliance-as-Code CI/CD Pipeline software prototype.
+
+## Prerequisites
+
+- Python 3.12 or higher
+- uv (fast Python package installer)
+
+### Installing uv
+
+#### macOS
+
+If you have Python installed, you can use pip:
+
+```bash
+pip install uv
+```
+
+Alternatively, using the installer script:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Or using Homebrew:
+
+```bash
+brew install uv
+```
+
+#### Linux
+
+If you have Python installed, you can use pip:
+
+```bash
+pip install uv
+```
+
+Alternatively, using the installer script:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+#### Windows
+
+If you have Python installed, you can use pip:
+
+```bash
+pip install uv
+```
+
+Alternatively, using PowerShell:
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+Or using winget (if available):
+
+```bash
+winget install --id=astral-sh.uv  --source winget
+```
+
+For more details or other installation methods, see the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+
+## Setup
+
+1. Clone or navigate to the project directory.
+
+2. Install dependencies:
+
+```bash
+make install
+```
+
+This runs `uv sync` to create a virtual environment and install dependencies.
+
+## Running the Application
+
+To run the application locally:
+
+```bash
+make run
+```
+
+This executes `uv run software-prototype`, which will print "Pipeline starting...".
+
+## Building and Running with Docker
+
+To build the Docker image:
+
+```bash
+make docker-build
+```
+
+To run the application in a Docker container:
+
+```bash
+make docker-run
+```
+
+## Project Structure
+
+- `app/`: Python package containing the application code
+  - `__init__.py`: Package initializer
+  - `main.py`: Main entry point
+- `pyproject.toml`: Project configuration for uv
+- `Dockerfile`: Docker configuration
+- `Makefile`: Build and run commands
+- `README.md`: This file
+
+## Development
+
+To add dependencies, edit `pyproject.toml` and run `uv sync`.
+
+To activate the virtual environment manually:
+
+#### macOS/Linux
+
+```bash
+source .venv/bin/activate
+```
+
+#### Windows (Command Prompt)
+
+```cmd
+.venv\Scripts\activate
+```
+
+#### Windows (PowerShell)
+
+```powershell
+.venv\Scripts\activate.ps1
+```
+
+## Cleaning Up
+
+To clean build artifacts and Docker images:
+
+```bash
+make clean
+```
