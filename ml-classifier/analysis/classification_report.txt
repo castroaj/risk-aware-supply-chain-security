@@ -1,0 +1,34 @@
+Risk-Aware Supply Chain Security — Decision Tree Classifier
+============================================================
+
+Dataset size  : 143 images
+Train / Test  : 114 / 29
+Test Accuracy : 0.9310
+CV Accuracy   : 0.9584 ± 0.0257
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       ALLOW       0.91      1.00      0.95        10
+       BLOCK       1.00      0.92      0.96        13
+        WARN       0.83      0.83      0.83         6
+
+    accuracy                           0.93        29
+   macro avg       0.91      0.92      0.92        29
+weighted avg       0.93      0.93      0.93        29
+
+Decision Tree Rules:
+|--- cvss_ge_7_count <= 34.50
+|   |--- class: 0
+|--- cvss_ge_7_count >  34.50
+|   |--- critical_cve_count <= 49.00
+|   |   |--- unique_cwe_count <= 75.00
+|   |   |   |--- class: 2
+|   |   |--- unique_cwe_count >  75.00
+|   |   |   |--- class: 2
+|   |--- critical_cve_count >  49.00
+|   |   |--- cvss_ge_7_count <= 205.50
+|   |   |   |--- class: 1
+|   |   |--- cvss_ge_7_count >  205.50
+|   |   |   |--- class: 1
+
