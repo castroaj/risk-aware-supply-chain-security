@@ -1,5 +1,17 @@
 dataclasses==0.6
 pandas==2.3.3
 pkgconfig==1.6.0
-setuptools 
+setuptools
 wheel
+
+# ML training and inference
+scikit-learn>=1.3,<2.0
+joblib>=1.3
+numpy>=1.24,<3.0
+
+# Visualization
+matplotlib>=3.7
+seaborn>=0.13
+
+# Testing
+pytest>=7.0
