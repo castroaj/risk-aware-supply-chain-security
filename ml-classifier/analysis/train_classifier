@@ -1,0 +1,492 @@
+"""
+train_classifier.py
+====================
+Decision Tree classifier for the Risk-Aware Supply Chain Security pipeline.
+
+Usage (run from the ml-classifier/ directory, or adjust DATA_ROOT below):
+    python train_classifier.py
+
+Outputs (written to the same directory as this script):
+    decision_tree_model.pkl     – trained model (joblib)
+    label_encoder.pkl           – fitted LabelEncoder (joblib)
+    feature_names.pkl           – list of feature names (joblib)
+    classification_report.txt   – full evaluation report
+    confusion_matrix.png        – heatmap of the confusion matrix
+    decision_tree.png           – visualised decision tree
+"""
+
+import os
+import json
+import csv
+import pickle
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.tree import DecisionTreeClassifier, plot_tree, export_text
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import (
+    classification_report,
+    confusion_matrix,
+    ConfusionMatrixDisplay,
+    accuracy_score,
+)
+import joblib
+
+# ---------------------------------------------------------------------------
+# 0.  Paths — adjust DATA_ROOT if you run from outside ml-classifier/
+# ---------------------------------------------------------------------------
+
+HERE = Path(__file__).parent
+
+# Repo layout:
+#   ml-classifier/
+#     analysis/train_classifier.py   ← THIS FILE
+#     data/image-lists/high-qual.csv
+#     data/image-lists/aged-stale.csv
+#     data/image-lists/known-vuln.csv
+#     data/scans/high-qual/          ← JSON SBOMs (auto-detected below)
+#
+# The script walks upward from analysis/ to ml-classifier/ automatically.
+ML_CLASSIFIER = HERE.parent           # ml-classifier/
+DATA_ROOT     = ML_CLASSIFIER / "data" / "scans"
+MANIFESTS     = ML_CLASSIFIER / "data" / "image-lists"
+OUTPUT_DIR    = HERE                  # outputs stay in analysis/
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# ---------------------------------------------------------------------------
+# 1.  Feature names (9 features used by sbom_extractor.py rubric)
+# ---------------------------------------------------------------------------
+
+FEATURES = [
+    "total_dependency_count",
+    "vuln_total",
+    "critical_cve_count",
+    "high_cve_count",
+    "cvss_ge_7_count",
+    "max_cvss",
+    "unique_cwe_count",
+    "top25_cwe_count",
+    "base_image_age_days",
+]
+
+# ---------------------------------------------------------------------------
+# 2.  Rule-based label assignment  (mirrors sbom_extractor.py thresholds)
+#     BLOCK is evaluated first; any single breach → BLOCK.
+#     Then WARN; any breach → WARN.  Otherwise → ALLOW.
+# ---------------------------------------------------------------------------
+
+BLOCK_THRESHOLDS = {
+    "critical_cve_count":  50,
+    "top25_cwe_count":    150,
+    "base_image_age_days": 2000,
+}
+
+WARN_THRESHOLDS = {
+    "critical_cve_count":  10,
+    "cvss_ge_7_count":    100,
+    "unique_cwe_count":    40,
+    "top25_cwe_count":     50,
+    "base_image_age_days": 365,
+}
+
+
+def rule_based_label(row: dict) -> str:
+    """Assign ALLOW / WARN / BLOCK from a feature-value dict."""
+    for feat, thresh in BLOCK_THRESHOLDS.items():
+        if row.get(feat, 0) >= thresh:
+            return "BLOCK"
+    for feat, thresh in WARN_THRESHOLDS.items():
+        if row.get(feat, 0) >= thresh:
+            return "WARN"
+    return "ALLOW"
+
+
+# ---------------------------------------------------------------------------
+# 3.  Feature extraction from a single CycloneDX JSON SBOM (Trivy output)
+# ---------------------------------------------------------------------------
+
+# MITRE Top-25 CWEs (2023 list)
+TOP25_CWES = {
+    "CWE-787", "CWE-79",  "CWE-89",  "CWE-416", "CWE-78",
+    "CWE-20",  "CWE-125", "CWE-22",  "CWE-352", "CWE-434",
+    "CWE-862", "CWE-476", "CWE-287", "CWE-190", "CWE-502",
+    "CWE-77",  "CWE-119", "CWE-798", "CWE-918", "CWE-306",
+    "CWE-362", "CWE-269", "CWE-94",  "CWE-863", "CWE-276",
+}
+
+
+def extract_features(json_path: Path) -> dict:
+    """
+    Parse a Trivy CycloneDX JSON SBOM and return a feature dict.
+    Returns None if the file cannot be parsed.
+    """
+    try:
+        with open(json_path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return None
+
+    # --- dependencies ---
+    components = data.get("components", [])
+    total_dependency_count = len(components)
+
+    # --- vulnerabilities ---
+    vulnerabilities = data.get("vulnerabilities", [])
+    vuln_total        = len(vulnerabilities)
+    critical_cve      = 0
+    high_cve          = 0
+    cvss_ge7          = 0
+    max_cvss          = 0.0
+    cwe_set           = set()
+    top25_count       = 0
+
+    for vuln in vulnerabilities:
+        ratings = vuln.get("ratings", [])
+        vuln_cwes = set()
+
+        # severity / CVSS
+        for rating in ratings:
+            severity = rating.get("severity", "").upper()
+            score    = rating.get("score", 0) or 0
+            try:
+                score = float(score)
+            except (TypeError, ValueError):
+                score = 0.0
+
+            if severity == "CRITICAL":
+                critical_cve += 1
+            elif severity == "HIGH":
+                high_cve += 1
+
+            if score >= 7.0:
+                cvss_ge7 += 1
+            if score > max_cvss:
+                max_cvss = score
+
+        # CWEs
+        for cwe_raw in vuln.get("cwes", []):
+            cwe_id = f"CWE-{cwe_raw}" if not str(cwe_raw).startswith("CWE") else str(cwe_raw)
+            cwe_set.add(cwe_id)
+            vuln_cwes.add(cwe_id)
+
+        # count Top-25 hits per vulnerability (not per CWE — mirrors rubric intent)
+        if vuln_cwes & TOP25_CWES:
+            top25_count += len(vuln_cwes & TOP25_CWES)
+
+    unique_cwe_count = len(cwe_set)
+
+    # --- base image age ---
+    # Trivy embeds creation timestamp in metadata → properties or metadata.timestamp
+    base_image_age_days = 0.0
+    try:
+        from datetime import datetime, timezone
+        meta = data.get("metadata", {})
+        ts_str = meta.get("timestamp", "")
+        if ts_str:
+            scan_time = datetime.now(tz=timezone.utc)
+            img_time  = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            base_image_age_days = max((scan_time - img_time).days, 0)
+    except Exception:
+        base_image_age_days = 0.0
+
+    return {
+        "total_dependency_count": total_dependency_count,
+        "vuln_total":             vuln_total,
+        "critical_cve_count":     critical_cve,
+        "high_cve_count":         high_cve,
+        "cvss_ge_7_count":        cvss_ge7,
+        "max_cvss":               max_cvss,
+        "unique_cwe_count":       unique_cwe_count,
+        "top25_cwe_count":        top25_count,
+        "base_image_age_days":    base_image_age_days,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 4.  Load manifests + extract features for all 143 images
+# ---------------------------------------------------------------------------
+
+BUCKET_INFO = {
+    "high-qual":   ("high-qual.csv",  "ALLOW"),
+    "aged-stale":  ("aged-stale.csv", "WARN"),
+    "known-vuln":  ("known-vuln.csv", "BLOCK"),
+}
+
+def find_json(json_filename: str, bucket_name: str):
+    """Search common layouts, then fall back to a recursive glob under data/."""
+    candidates = [
+        ML_CLASSIFIER / "data" / "scans" / bucket_name / json_filename,
+        ML_CLASSIFIER / "data" / bucket_name / json_filename,
+        ML_CLASSIFIER / "data" / "scans" / json_filename,
+        ML_CLASSIFIER / "data" / json_filename,
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    matches = list((ML_CLASSIFIER / "data").rglob(json_filename))
+    return matches[0] if matches else None
+
+records = []
+
+for bucket_name, (csv_file, bucket_label) in BUCKET_INFO.items():
+    csv_path = MANIFESTS / csv_file
+
+    if not csv_path.exists():
+        print(f"[WARN] manifest not found: {csv_path} — skipping bucket '{bucket_name}'")
+        continue
+
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row or len(row) < 2:
+                continue
+            image_tag, json_filename = row[0].strip(), row[1].strip()
+            json_path = find_json(json_filename, bucket_name)
+
+            if json_path is None:
+                print(f"[WARN] JSON not found for {image_tag} ({json_filename}) — skipping")
+                continue
+
+            feats = extract_features(json_path)
+            if feats is None:
+                print(f"[WARN] could not parse {json_path} — skipping")
+                continue
+
+            rule_label = rule_based_label(feats)
+
+            records.append({
+                "image":        image_tag,
+                "bucket":       bucket_name,
+                "bucket_label": bucket_label,
+                "rule_label":   rule_label,
+                **feats,
+            })
+
+if not records:
+    # Print what we actually found to help debug
+    data_dir = ML_CLASSIFIER / "data"
+    print(f"\n[DEBUG] Contents of {data_dir}:")
+    for p in sorted(data_dir.rglob("*"))[:30]:
+        print(f"  {p}")
+    raise RuntimeError(
+        f"No records loaded.\n"
+        f"  CSVs expected at : {MANIFESTS}\n"
+        f"  JSONs searched in: {data_dir}\n"
+        f"Make sure your JSON scan files are somewhere under ml-classifier/data/"
+    )
+
+df = pd.DataFrame(records)
+print(f"\nLoaded {len(df)} images across {df['bucket'].nunique()} buckets.")
+print(df.groupby(["bucket", "rule_label"]).size().unstack(fill_value=0))
+
+# ---------------------------------------------------------------------------
+# 5.  Build feature matrix X and label vector y
+#     We use the RULE-BASED label as ground truth (matches dataset-statistics.md)
+# ---------------------------------------------------------------------------
+
+X = df[FEATURES].values.astype(float)
+y_raw = df["rule_label"].values
+
+le = LabelEncoder()
+y  = le.fit_transform(y_raw)          # ALLOW=0, BLOCK=1, WARN=2  (alphabetical)
+
+print(f"\nClass distribution: {dict(zip(le.classes_, np.bincount(y)))}")
+
+# ---------------------------------------------------------------------------
+# 6.  Train / test split  (80 / 20, stratified)
+# ---------------------------------------------------------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y,
+    test_size=0.20,
+    random_state=42,
+    stratify=y,
+)
+
+print(f"\nTrain size: {len(X_train)}  |  Test size: {len(X_test)}")
+
+# ---------------------------------------------------------------------------
+# 7.  Train Decision Tree
+# ---------------------------------------------------------------------------
+
+clf = DecisionTreeClassifier(
+    criterion="gini",
+    max_depth=5,           # shallow enough to stay interpretable / avoid overfit
+    min_samples_split=4,
+    min_samples_leaf=2,
+    class_weight="balanced",
+    random_state=42,
+)
+
+clf.fit(X_train, y_train)
+
+# ---------------------------------------------------------------------------
+# 8.  Evaluate
+# ---------------------------------------------------------------------------
+
+y_pred = clf.predict(X_test)
+
+acc = accuracy_score(y_test, y_pred)
+report = classification_report(y_test, y_pred, target_names=le.classes_)
+cm     = confusion_matrix(y_test, y_pred)
+
+print(f"\nTest Accuracy: {acc:.4f}")
+print("\nClassification Report:")
+print(report)
+
+# Cross-validation on full dataset
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+cv_scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
+print(f"5-Fold CV Accuracy: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+
+# ---------------------------------------------------------------------------
+# 9.  Save text report
+# ---------------------------------------------------------------------------
+
+report_path = OUTPUT_DIR / "classification_report.txt"
+with open(report_path, "w") as f:
+    f.write("Risk-Aware Supply Chain Security — Decision Tree Classifier\n")
+    f.write("=" * 60 + "\n\n")
+    f.write(f"Dataset size  : {len(df)} images\n")
+    f.write(f"Train / Test  : {len(X_train)} / {len(X_test)}\n")
+    f.write(f"Test Accuracy : {acc:.4f}\n")
+    f.write(f"CV Accuracy   : {cv_scores.mean():.4f} ± {cv_scores.std():.4f}\n\n")
+    f.write("Classification Report:\n")
+    f.write(report + "\n")
+    f.write("Decision Tree Rules:\n")
+    f.write(export_text(clf, feature_names=FEATURES) + "\n")
+
+print(f"\nReport saved → {report_path}")
+
+# ---------------------------------------------------------------------------
+# 10.  Confusion matrix plot
+# ---------------------------------------------------------------------------
+
+fig, ax = plt.subplots(figsize=(6, 5))
+disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=le.classes_)
+disp.plot(ax=ax, colorbar=False, cmap="Blues")
+ax.set_title("Confusion Matrix — Decision Tree (Test Set)")
+plt.tight_layout()
+cm_path = OUTPUT_DIR / "confusion_matrix.png"
+plt.savefig(cm_path, dpi=150)
+plt.close()
+print(f"Confusion matrix saved → {cm_path}")
+
+# ---------------------------------------------------------------------------
+# 11.  Decision tree visualisation
+# ---------------------------------------------------------------------------
+
+fig, ax = plt.subplots(figsize=(20, 10))
+plot_tree(
+    clf,
+    feature_names=FEATURES,
+    class_names=list(le.classes_),
+    filled=True,
+    rounded=True,
+    fontsize=9,
+    ax=ax,
+    impurity=True,
+    proportion=False,
+)
+ax.set_title("Decision Tree — Risk Classification (max_depth=5)", fontsize=13)
+plt.tight_layout()
+dt_path = OUTPUT_DIR / "decision_tree.png"
+plt.savefig(dt_path, dpi=150, bbox_inches="tight")
+plt.close()
+print(f"Decision tree plot saved → {dt_path}")
+
+# ---------------------------------------------------------------------------
+# 12.  Feature importance bar chart
+# ---------------------------------------------------------------------------
+
+importances = clf.feature_importances_
+sorted_idx  = np.argsort(importances)[::-1]
+
+fig, ax = plt.subplots(figsize=(9, 5))
+ax.bar(
+    [FEATURES[i] for i in sorted_idx],
+    importances[sorted_idx],
+    color="steelblue",
+    edgecolor="white",
+)
+ax.set_title("Feature Importances — Decision Tree")
+ax.set_ylabel("Gini Importance")
+ax.set_xlabel("Feature")
+plt.xticks(rotation=35, ha="right", fontsize=9)
+plt.tight_layout()
+fi_path = OUTPUT_DIR / "feature_importances.png"
+plt.savefig(fi_path, dpi=150)
+plt.close()
+print(f"Feature importances saved → {fi_path}")
+
+# ---------------------------------------------------------------------------
+# 13.  Feature correlation matrix
+# ---------------------------------------------------------------------------
+
+corr = df[FEATURES].corr()
+
+# Short labels so axis text doesn't overlap
+short_labels = [
+    "dep_count", "vuln_total", "crit_cve", "high_cve",
+    "cvss≥7", "max_cvss", "uniq_cwe", "top25_cwe", "img_age_days"
+]
+
+fig, ax = plt.subplots(figsize=(10, 8))
+mask = np.zeros_like(corr, dtype=bool)
+mask[np.triu_indices_from(mask)] = True          # hide upper triangle (redundant)
+
+sns.heatmap(
+    corr,
+    mask=mask,
+    annot=True,
+    fmt=".2f",
+    cmap="coolwarm",
+    center=0,
+    vmin=-1, vmax=1,
+    linewidths=0.5,
+    square=True,
+    ax=ax,
+    xticklabels=short_labels,
+    yticklabels=short_labels,
+    annot_kws={"size": 8},
+)
+ax.set_title("Feature Correlation Matrix", fontsize=13, pad=12)
+plt.xticks(rotation=40, ha="right", fontsize=9)
+plt.yticks(rotation=0, fontsize=9)
+plt.tight_layout()
+corr_path = OUTPUT_DIR / "feature_correlation_matrix.png"
+plt.savefig(corr_path, dpi=150, bbox_inches="tight")
+plt.close()
+print(f"Correlation matrix saved → {corr_path}")
+
+# ---------------------------------------------------------------------------
+# 14.  Persist model artefacts
+# ---------------------------------------------------------------------------
+
+joblib.dump(clf,        OUTPUT_DIR / "decision_tree_model.pkl")
+joblib.dump(le,         OUTPUT_DIR / "label_encoder.pkl")
+joblib.dump(FEATURES,   OUTPUT_DIR / "feature_names.pkl")
+print(f"\nModel artifacts saved to {OUTPUT_DIR}/")
+
+# ---------------------------------------------------------------------------
+# 14.  Quick inference helper (import this from other scripts)
+# ---------------------------------------------------------------------------
+
+def predict_single(feature_dict: dict) -> str:
+    """
+    Given a dict of {feature_name: value}, return ALLOW / WARN / BLOCK.
+    All 9 FEATURES must be present; missing ones default to 0.
+    """
+    vec = np.array([[feature_dict.get(f, 0) for f in FEATURES]], dtype=float)
+    label_idx = clf.predict(vec)[0]
+    return le.inverse_transform([label_idx])[0]
+
+
+if __name__ == "__main__":
+    print("\nDone. All outputs written to:", OUTPUT_DIR)
