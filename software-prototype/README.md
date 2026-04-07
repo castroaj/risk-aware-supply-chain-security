@@ -4,7 +4,7 @@ This is the skeleton for the Risk-Aware Compliance-as-Code CI/CD Pipeline softwa
 
 ## Prerequisites
 
-- Python 3.12 or higher
+- Python 3.14 or higher
 - uv (fast Python package installer)
 
 ### Installing uv
@@ -100,6 +100,26 @@ To run the application in a Docker container:
 ```bash
 make docker-run
 ```
+
+## CI Build Workflow
+
+The repository includes a GitHub Actions workflow at
+`.github/workflows/software-prototype-build.yml` to define build processing for
+this prototype.
+
+It runs when:
+
+- A pull request changes files under `software-prototype/`
+- A push to `main` changes files under `software-prototype/`
+- Triggered manually with `workflow_dispatch`
+
+Workflow steps:
+
+1. Set up Python 3.14 on `ubuntu-latest`
+2. Install `uv` and sync dependencies with `uv sync --frozen`
+3. Run a smoke test using `uv run software-prototype`
+4. Build package artifacts with `uv build`
+5. Upload `dist/*` as a CI artifact
 
 ## Project Structure
 
