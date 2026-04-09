@@ -91,7 +91,7 @@ jobs:
         with:
           name: software-prototype-security-reports
           path: |
-            software-prototype/trivy-sbom.cdx.json
-            software-prototype/trivy-vuln-report.json
+            trivy-sbom.cdx.json
+            trivy-vuln-report.json
           if-no-files-found: error
 
