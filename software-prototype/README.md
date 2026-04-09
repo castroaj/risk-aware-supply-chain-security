@@ -119,7 +119,11 @@ Workflow steps:
 2. Install `uv` and sync dependencies with `uv sync --frozen`
 3. Run a smoke test using `uv run software-prototype`
 4. Build package artifacts with `uv build`
-5. Upload `dist/*` as a CI artifact
+5. Build a Docker image (`software-prototype:ci`) for security scanning
+6. Generate a CycloneDX SBOM with Trivy (`trivy-sbom.cdx.json`)
+7. Generate a vulnerability report in JSON (`trivy-vuln-report.json`)
+8. Enforce policy by failing CI when any `CRITICAL` vulnerability is detected
+9. Upload `dist/*` and security scan reports as CI artifacts
 
 ## Project Structure
 
