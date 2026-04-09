@@ -52,17 +52,32 @@ jobs:
       - name: Build Docker image for scanning
         run: docker build -t software-prototype:ci .
 
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0.2.2
-
       - name: Generate CycloneDX SBOM (Trivy)
-        run: trivy image --no-progress --scanners vuln --format cyclonedx --output trivy-sbom.cdx.json software-prototype:ci
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: software-prototype:ci
+          format: cyclonedx
+          output: trivy-sbom.cdx.json
+          scanners: vuln
 
-      - name: Generate vulnerability report (JSON)
-        run: trivy image --no-progress --scanners vuln --format json --output trivy-vuln-report.json software-prototype:ci
+      - name: Generate JSON vulnerability report (Trivy)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: software-prototype:ci
+          format: json
+          output: trivy-vuln-report.json
+          scanners: vuln
+          skip-setup-trivy: true
 
       - name: Enforce vulnerability policy (fail on CRITICAL)
-        run: trivy image --no-progress --scanners vuln --severity CRITICAL --exit-code 1 software-prototype:ci
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: software-prototype:ci
+          format: table
+          severity: CRITICAL
+          exit-code: 1
+          scanners: vuln
+          skip-setup-trivy: true
 
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4
