@@ -53,7 +53,7 @@ jobs:
         run: docker build -t software-prototype:ci .
 
       - name: Generate CycloneDX SBOM (Trivy)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: software-prototype:ci
           format: cyclonedx
@@ -61,7 +61,7 @@ jobs:
           scanners: vuln
 
       - name: Generate JSON vulnerability report (Trivy)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: software-prototype:ci
           format: json
@@ -70,7 +70,7 @@ jobs:
           skip-setup-trivy: true
 
       - name: Enforce vulnerability policy (fail on CRITICAL)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: software-prototype:ci
           format: table
