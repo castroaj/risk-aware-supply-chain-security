@@ -3,6 +3,7 @@ __pycache__
 *vuln-scan/
 ml-classifier/src/*egg-info
 ml-classifier/data/scans/
+ml-classifier/data/labels/
 ml-classifier/analysis/runs/*
 
 software-prototype/.venv/
