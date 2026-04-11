@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import sbom_extractor as _extractor
+from classifier import sbom_extractor as _extractor
 from classifier.predictor import Predictor, PredictionResult
 from classifier.trainer import Trainer
 

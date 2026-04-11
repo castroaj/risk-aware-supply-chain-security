@@ -17,7 +17,7 @@ import pytest
 import joblib
 
 from classifier.trainer import Trainer, TrainingConfig, TrainingResult
-import sbom_extractor as _extractor
+from classifier import sbom_extractor as _extractor
 
 
 # ---------------------------------------------------------------------------

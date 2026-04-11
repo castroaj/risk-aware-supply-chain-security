@@ -12,23 +12,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 source .venv/bin/activate
 ```
 
-The virtual environment is Python 3.9 (`.venv/`). Dependencies are in `requirements.txt`: `dataclasses`, `pandas`, `pkgconfig`, `setuptools`, `wheel`.
+The virtual environment is Python 3.9 (`.venv/`). Dependencies are in `requirements.txt`: `dataclasses`, `pandas`, `pkgconfig`, `setuptools`, `wheel`, `scikit-learn`, `joblib`, `numpy`, `matplotlib`, `seaborn`, `pytest`.
 
-## Running the SBOM Extractor
+## Running the SBOM Extractor (standalone CLI)
+
+The extractor CLI lives inside the classifier package. The old path (`src/sbom_extractor.py`) is a backward-compatibility shim that forwards to it.
 
 ```bash
 # Process a single SBOM file, output JSON to stdout
-python src/sbom_extractor.py -s <path/to/sbom.json>
+python src/classifier/sbom_extractor.py -s <path/to/sbom.json>
 
 # Process an entire directory of SBOM files, output CSV
-python src/sbom_extractor.py -s <path/to/sbom-dir/> -f csv
+python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv
 
 # Write output to a file instead of stdout
-python src/sbom_extractor.py -s <path/to/sbom.json> -f csv -o output.csv
+python src/classifier/sbom_extractor.py -s <path/to/sbom.json> -f csv -o output.csv
 
-# Append ALLOW/WARN/BLOCK classification column to the output
-python src/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
+# Append ALLOW/WARN/BLOCK rule-based classification column to the output
+python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 ```
+
+## Running the ML Classifier CLI
+
+```bash
+# Train the Decision Tree on all three data buckets
+python src/classifier/cli.py train \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/ \
+    --output-dir analysis/
+
+# Predict from a single SBOM file (requires trained artifacts in analysis/)
+python src/classifier/cli.py predict \
+    --sbom data/scans/high-qual/alpine-3.18.json \
+    --artifact-dir analysis/ \
+    --format json
+
+# Predict from a directory of SBOMs, write CSV to file
+python src/classifier/cli.py predict \
+    --sbom data/scans/high-qual/ \
+    --artifact-dir analysis/ \
+    --format csv \
+    --output results.csv
+```
+
+## Running Tests
+
+```bash
+# Run the full test suite from the ml-classifier/ directory
+python -m pytest tests/ -v
+```
+
+Tests live in `tests/` and cover `data_loader`, `trainer`, `predictor`, and `reporting`. `tests/conftest.py` adds `src/` to `sys.path` so both the `classifier` package and the `sbom_extractor` shim are importable without installation.
 
 ## Generating SBOM Scan Data
 
@@ -72,23 +106,58 @@ Full statistical analysis, feature rubric rationale, and threshold derivations a
 
 ## Architecture
 
-This is an ML classifier for container image supply chain risk assessment. The pipeline has three stages:
+This is an ML classifier for container image supply chain risk assessment. The pipeline has four stages:
 
 **Stage 1 — Training Data Generation** (`scripts/`)
 - Uses [Trivy](https://github.com/aquasecurity/trivy) to scan Docker images and produce CycloneDX-format SBOM JSON files
 - Pre-scanned results are stored in `data/scans/high-qual/`, `data/scans/aged-stale/`, and `data/scans/known-vuln/`, corresponding to the three training labels
 
-**Stage 2 — Feature Extraction** (`src/sbom_extractor.py`)
+**Stage 2 — Feature Extraction** (`src/classifier/sbom_extractor.py`)
 - Parses CycloneDX JSON SBOMs and extracts a fixed-length `SecurityMetric` feature vector
 - Features (9): `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`, `base_image_age_days`
-- SAST/Semgrep features (`semgrep_total`, `semgrep_high_count`) were removed from the current implementation scope; rationale is in `research/ML_model/semgrep-feature-analysis.md`
-- `base_image_age_days` uses a two-tier extraction strategy: (1) a label fallback chain checks `aquasecurity:trivy:Labels:build-date`, `org.opencontainers.image.created`, `org.label-schema.build-date`, and `com.docker.dhi.created` in `.metadata.component.properties`; (2) if no label resolves, the Docker Hub public API is queried using `aquasecurity:trivy:Reference` (5-second timeout, gracefully falls back to `0.0` on failure). Images where the tag was republished after the scan was taken will still return `0.0`.
-- The `SecurityMetricsCollection` wraps multiple `SecurityMetric` objects into a pandas DataFrame and exports to CSV or JSON
+- SAST/Semgrep features (`semgrep_total`, `semgrep_high_count`) were removed from current scope; rationale is in `research/ML_model/semgrep-feature-analysis.md`
+- `base_image_age_days` uses a two-tier strategy: (1) label fallback chain in `.metadata.component.properties`; (2) Docker Hub public API via `aquasecurity:trivy:Reference` (5s timeout, falls back to `0.0`)
 - Severity ratings use the highest rating across all sources per vulnerability (not NVD-only)
 - Top 25 CWEs reference the MITRE 2025 list hardcoded in `TOP_25_CWES`
+- `FEATURES` list is the single source of truth for feature ordering across training and prediction
 
-**Stage 3 — Rule-Based Classification** (`src/sbom_extractor.py`)
-- `BLOCK_THRESHOLDS` and `WARN_THRESHOLDS` module-level constants define per-feature cutoffs; BLOCK is evaluated before WARN and any single breach returns that verdict
-- `classify_metric(metric: SecurityMetric) -> str` is a public function that returns `"BLOCK"`, `"WARN"`, or `"ALLOW"`; can be called programmatically independent of the CLI
-- `-c / --classify` CLI flag appends a `classification` column to the output; works with both CSV and JSON formats
-- Threshold values and feature selection rationale are documented in `analysis/dataset-statistics.md`
+**Stage 3 — Rule-Based Classification** (`src/classifier/sbom_extractor.py`)
+- `BLOCK_THRESHOLDS` and `WARN_THRESHOLDS` define per-feature cutoffs; BLOCK is evaluated before WARN
+- `classify_metric(metric: SecurityMetric) -> str` returns `"BLOCK"`, `"WARN"`, or `"ALLOW"`
+- Used during dataset loading to populate the `rule_label` column that the Decision Tree trains against
+
+**Stage 4 — ML Training and Prediction** (`src/classifier/`)
+- `data_loader.py` — reads bucket manifests, calls the extractor for each SBOM, builds a labeled DataFrame
+- `trainer.py` (`Trainer`) — fits a `DecisionTreeClassifier`, runs stratified K-fold CV, returns a `TrainingResult`
+- `predictor.py` (`Predictor`) — loads saved pkl artifacts and exposes `predict(metric)` / `predict_from_dict(dict)`
+- `results.py` (`TrainingConfig`, `TrainingResult`) — hyperparameter dataclass and training output bundle; also contains all visualization and reporting functions
+- `cli.py` — `train` and `predict` subcommands; run directly with `python src/classifier/cli.py`
+
+## Package Layout
+
+```
+src/
+  sbom_extractor.py          # Backward-compat shim — re-exports from classifier/sbom_extractor.py
+  classifier/
+    __init__.py              # Public API: Trainer, Predictor, TrainingConfig, TrainingResult,
+                             #             SecurityMetric, FEATURES, classify_metric,
+                             #             build_security_metric_from_sbom
+    sbom_extractor.py        # Feature extraction, SecurityMetric dataclass, rule-based classifier
+    data_loader.py           # Dataset loading from bucket manifests
+    trainer.py               # DecisionTreeClassifier training pipeline
+    predictor.py             # ML inference from saved artifacts
+    results.py               # TrainingConfig, TrainingResult, visualization and reporting functions
+    cli.py                   # Train and predict CLI entry point
+tests/
+  conftest.py                # Adds src/ to sys.path for both package and shim imports
+  test_data_loader.py
+  test_trainer.py
+  test_predictor.py
+  test_reporting.py
+```
+
+## Key Import Note
+
+`cli.py` is designed to run both as a direct script and as part of the package. It adds `src/` to `sys.path` at startup and uses absolute imports (`from classifier import ...`) rather than relative ones, so `python src/classifier/cli.py` works without installation.
+
+The shim at `src/sbom_extractor.py` exists solely for backward compatibility with the old CLI path and with any code that does `import sbom_extractor`. New code should import directly from the `classifier` package.

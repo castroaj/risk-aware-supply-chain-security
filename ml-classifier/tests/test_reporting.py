@@ -13,9 +13,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from classifier.reporting import write_classification_report
+from classifier.results import write_classification_report
 from classifier.trainer import Trainer
-import sbom_extractor as _extractor
+from classifier import sbom_extractor as _extractor
 
 
 # ---------------------------------------------------------------------------
