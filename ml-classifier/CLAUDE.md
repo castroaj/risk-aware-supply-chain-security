@@ -155,9 +155,8 @@ This is an ML classifier for container image supply chain risk assessment. The p
 
 **Stage 4 — ML Training and Prediction** (`src/classifier/`)
 - `data_loader.py` — reads bucket manifests, optionally reads pre-labeled CSVs, calls the extractor for each SBOM, builds a labeled DataFrame
-- `trainer.py` (`Trainer`) — fits a `DecisionTreeClassifier`, runs stratified K-fold CV, returns a `TrainingResult`
+- `trainer.py` (`TrainingConfig`, `TrainingResult`, `Trainer`) — hyperparameter dataclass, training output bundle with visualization/reporting methods, and the `Trainer` class that fits a `DecisionTreeClassifier` and runs stratified K-fold CV
 - `predictor.py` (`Predictor`) — loads saved pkl artifacts and exposes `predict(metric)` / `predict_from_dict(dict)`
-- `results.py` (`TrainingConfig`, `TrainingResult`) — hyperparameter dataclass and training output bundle; also contains all visualization and reporting functions
 - `cli.py` — `label`, `train`, and `predict` subcommands; registered as separate console scripts via `pyproject.toml`
 
 ## Package Layout
@@ -172,9 +171,8 @@ src/
                              #             build_security_metric_from_sbom
     sbom_extractor.py        # Feature extraction, SecurityMetric dataclass, rule-based classifier
     data_loader.py           # Dataset loading from bucket manifests
-    trainer.py               # DecisionTreeClassifier training pipeline
+    trainer.py               # TrainingConfig, TrainingResult, Trainer, visualization and reporting functions
     predictor.py             # ML inference from saved artifacts
-    results.py               # TrainingConfig, TrainingResult, visualization and reporting functions
     cli.py                   # Label, train, and predict CLI entry points
 tests/
   conftest.py                # sys.path fallback for uninstalled environments; no-op after editable install

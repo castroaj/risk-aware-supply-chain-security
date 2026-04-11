@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from classifier.results import write_classification_report
+from classifier.trainer import write_classification_report
 from classifier.trainer import Trainer
 from classifier import sbom_extractor as _extractor
 

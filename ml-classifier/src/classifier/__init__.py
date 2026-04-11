@@ -16,8 +16,7 @@ Public API:
 import logging
 logging.getLogger("classifier").addHandler(logging.NullHandler())
 
-from .results import TrainingConfig, TrainingResult
-from .trainer import Trainer
+from .trainer import Trainer, TrainingConfig, TrainingResult
 from .predictor import Predictor
 from .sbom_extractor import (
     SecurityMetric,
