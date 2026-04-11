@@ -5,6 +5,16 @@ Dataset size       : 143 images
 Train / Test split : 114 / 29
 Class distribution : ALLOW=35, BLOCK=61, WARN=47
 
+Hyperparameters:
+  criterion         : gini
+  max_depth         : 5
+  min_samples_split : 4
+  min_samples_leaf  : 2
+  class_weight      : balanced
+  random_state      : 42
+  test_size         : 0.20
+  cv_folds          : 5
+
 Test Accuracy      : 0.9655
 CV Accuracy        : 0.9232 ± 0.0563 (5-fold stratified)
 

@@ -255,9 +255,14 @@ def load_bucket(
             rule_label = classify_metric(metric)
             _log.info("load_bucket: image=%s rule_label=%s", image_tag, rule_label)
 
+            try:
+                scan_file_path = json_path.relative_to(Path.cwd())
+            except ValueError:
+                scan_file_path = json_path
+
             records.append(
                 {
-                    "scan_file":    str(json_path),
+                    "scan_file":    str(scan_file_path),
                     "image":        image_tag,
                     "bucket":       bucket_name,
                     "bucket_label": bucket_label,
