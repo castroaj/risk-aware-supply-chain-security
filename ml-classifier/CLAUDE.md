@@ -34,24 +34,30 @@ python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 
 ## Running the ML Classifier CLI
 
+Two separate entry points are provided — one for model development, one for pipeline use.
+
 ```bash
+# --- Training (model developer / data scientist) ---
+
 # Train using default paths — artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
 make train
 
 # Train the Decision Tree on all three data buckets
-risk-classifier train \
+risk-classifier-train \
     --manifests-dir data/image-lists/ \
     --data-root data/scans/ \
     --output-dir analysis/
 
+# --- Prediction (CI/CD pipeline / security engineer) ---
+
 # Predict from a single SBOM file (requires trained artifacts in analysis/)
-risk-classifier predict \
+risk-classifier-predict \
     --sbom data/scans/high-qual/alpine-3.18.json \
     --artifact-dir analysis/ \
     --format json
 
 # Predict from a directory of SBOMs, write CSV to file
-risk-classifier predict \
+risk-classifier-predict \
     --sbom data/scans/high-qual/ \
     --artifact-dir analysis/ \
     --format csv \

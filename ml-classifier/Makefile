@@ -21,7 +21,7 @@ test:
 ## train    — train the Decision Tree; artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
 train:
 	@echo "Output dir: $(OUTPUT_DIR)"
-	$(VENV)/bin/risk-classifier train \
+	$(VENV)/bin/risk-classifier-train \
 		--manifests-dir $(MANIFESTS) \
 		--data-root $(DATA_ROOT) \
 		--output-dir $(OUTPUT_DIR)

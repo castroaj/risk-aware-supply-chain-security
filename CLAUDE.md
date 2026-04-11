@@ -53,6 +53,18 @@ python src/classifier/sbom_extractor.py -s data/scans/high-qual/ -f csv -c
 
 # Print dataset statistics across all three training buckets
 python analysis/compute_statistics.py
+
+# Train the Decision Tree (model developer workflow)
+risk-classifier-train \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/ \
+    --output-dir analysis/
+
+# Classify a single SBOM (CI/CD pipeline workflow)
+risk-classifier-predict \
+    --sbom data/scans/high-qual/alpine-3.18.json \
+    --artifact-dir analysis/ \
+    --format json
 ```
 
 > **Docker Hub prerequisite:** All scan scripts pull images via Trivy and require `docker login` before running. Personal authenticated accounts are capped at **200 pulls per 6-hour window** — a hard constraint when scaling up image lists or using `-p` / `--parallel`.

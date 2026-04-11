@@ -1,29 +1,45 @@
 """
 cli.py
 ======
-Command-line interface for the risk classifier package.
+CLI entry points for the risk-classifier toolkit.
 
-Two subcommands:
+Two independent commands are registered as separate console scripts:
 
-    train   — Load SBOM scan data, train a Decision Tree, save artifacts and reports.
-    predict — Load saved model artifacts, classify one or more SBOM files.
+    risk-classifier-train    — data-science / model-development workflow.
+                               Loads SBOM scan data, trains a Decision Tree,
+                               and writes pkl artifacts, a text report, and
+                               visualisation PNGs to an output directory.
 
-Usage (from the ml-classifier/ directory after pip install -e .):
+    risk-classifier-predict  — CI/CD / runtime workflow.
+                               Loads saved model artifacts and classifies one
+                               or more CycloneDX SBOM files, writing
+                               ALLOW/WARN/BLOCK predictions to stdout or a
+                               file in JSON or CSV format.
 
-    # Train on all three buckets
-    risk-classifier train \\
+The two entry points are intentionally separate because they serve different
+users with different concerns: model developers need training controls
+(hyperparameters, data paths, report flags) while pipeline consumers only
+need to point at an SBOM and an artifact directory.
+
+Both commands share the --log-level / --log-file logging flags defined in
+_add_logging_args() and the _configure_logging() setup function.
+
+Usage (from ml-classifier/ after pip install -e .):
+
+    # Train on all three label buckets
+    risk-classifier-train \\
         --manifests-dir data/image-lists/ \\
         --data-root data/scans/ \\
         --output-dir analysis/
 
     # Predict from a single SBOM file
-    risk-classifier predict \\
+    risk-classifier-predict \\
         --sbom data/scans/high-qual/alpine-3.18.json \\
         --artifact-dir analysis/ \\
         --format json
 
     # Predict from a directory of SBOMs, write CSV to file
-    risk-classifier predict \\
+    risk-classifier-predict \\
         --sbom data/scans/high-qual/ \\
         --artifact-dir analysis/ \\
         --format csv \\
@@ -115,135 +131,134 @@ def _existing_file_or_dir(value: str) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Argument parsing
+# Argument parsing — one dedicated parser per entry point
 # ---------------------------------------------------------------------------
 
-def parse_args() -> Namespace:
+def _parse_train_args() -> Namespace:
     """
-    Parse CLI arguments for the train and predict subcommands.
+    Parse arguments for the risk-classifier-train entry point.
 
     Returns:
-        Parsed Namespace. The 'subcommand' attribute is either 'train' or 'predict'.
+        Parsed Namespace with all training configuration fields.
     """
     parser = ArgumentParser(
-        prog="risk-classifier",
-        description="Risk-Aware Supply Chain Security — ML Classifier",
+        prog="risk-classifier-train",
+        description="Risk-Aware Supply Chain Security — Train the Decision Tree classifier.",
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
-    sub = parser.add_subparsers(dest="subcommand", required=True)
-
-    # --- train ---
-    train_p = sub.add_parser(
-        "train",
-        help="Train the Decision Tree classifier on SBOM scan data.",
-        formatter_class=ArgumentDefaultsHelpFormatter,
-    )
-    train_p.add_argument(
+    parser.add_argument(
         "--manifests-dir",
         type=_existing_dir,
         required=True,
         metavar="DIR",
         help="Directory containing high-qual.csv, aged-stale.csv, known-vuln.csv.",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--data-root",
         type=_existing_dir,
         required=True,
         metavar="DIR",
         help="Root directory containing SBOM JSON files (organised by bucket subdir).",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=Path("analysis"),
         metavar="DIR",
         help="Directory to write pkl artifacts, PNG plots, and the text report.",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--max-depth",
         type=int,
         default=5,
         metavar="N",
         help="Maximum depth of the Decision Tree.",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--min-samples-split",
         type=int,
         default=4,
         metavar="N",
         help="Minimum samples required to split an internal node.",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--min-samples-leaf",
         type=int,
         default=2,
         metavar="N",
         help="Minimum samples required to be at a leaf node.",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--test-size",
         type=float,
         default=0.20,
         metavar="FRAC",
         help="Fraction of the dataset to hold out for testing (0 < FRAC < 1).",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--random-state",
         type=int,
         default=42,
         metavar="N",
         help="Random seed for reproducibility.",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--no-plots",
         action="store_true",
         default=False,
         help="Skip saving visualization PNGs.",
     )
-    train_p.add_argument(
+    parser.add_argument(
         "--no-report",
         action="store_true",
         default=False,
         help="Skip saving the text classification report.",
     )
-    _add_logging_args(train_p)
+    _add_logging_args(parser)
+    return parser.parse_args()
 
-    # --- predict ---
-    predict_p = sub.add_parser(
-        "predict",
-        help="Classify one or more SBOMs using a trained model.",
+
+def _parse_predict_args() -> Namespace:
+    """
+    Parse arguments for the risk-classifier-predict entry point.
+
+    Returns:
+        Parsed Namespace with all prediction configuration fields.
+    """
+    parser = ArgumentParser(
+        prog="risk-classifier-predict",
+        description="Risk-Aware Supply Chain Security — Classify SBOM files using a trained model.",
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
-    predict_p.add_argument(
+    parser.add_argument(
         "--sbom",
         type=_existing_file_or_dir,
         required=True,
         metavar="PATH",
         help="Path to a CycloneDX JSON SBOM file or a directory of SBOM files.",
     )
-    predict_p.add_argument(
+    parser.add_argument(
         "--artifact-dir",
         type=_existing_dir,
         required=True,
         metavar="DIR",
         help="Directory containing decision_tree_model.pkl, label_encoder.pkl, feature_names.pkl.",
     )
-    predict_p.add_argument(
+    parser.add_argument(
         "--format",
         choices=["json", "csv"],
         default="json",
         dest="output_format",
         help="Output format for predictions.",
     )
-    predict_p.add_argument(
+    parser.add_argument(
         "--output",
         type=Path,
         default=None,
         metavar="FILE",
         help="Write output to this file instead of stdout.",
     )
-    _add_logging_args(predict_p)
-
+    _add_logging_args(parser)
     return parser.parse_args()
 
 
@@ -358,17 +373,29 @@ def _run_predict(args: Namespace) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Entry points — registered as separate console scripts in pyproject.toml
 # ---------------------------------------------------------------------------
 
-def main() -> None:
-    args = parse_args()
+def main_train() -> None:
+    """
+    Entry point for the risk-classifier-train command.
+
+    Intended user: data scientists and model developers who maintain and
+    retrain the Decision Tree on updated SBOM scan datasets.
+    """
+    args = _parse_train_args()
     _configure_logging(args.log_level, args.log_file)
-    if args.subcommand == "train":
-        _run_train(args)
-    elif args.subcommand == "predict":
-        _run_predict(args)
+    _run_train(args)
 
 
-if __name__ == "__main__":
-    main()
+def main_predict() -> None:
+    """
+    Entry point for the risk-classifier-predict command.
+
+    Intended user: CI/CD pipeline operators and security engineers who
+    classify container images at build or deploy time using a pre-trained
+    model artifact.
+    """
+    args = _parse_predict_args()
+    _configure_logging(args.log_level, args.log_file)
+    _run_predict(args)
