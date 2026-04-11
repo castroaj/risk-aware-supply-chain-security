@@ -4,15 +4,23 @@ PIP         := $(VENV)/bin/pip
 
 MANIFESTS   := data/image-lists/
 DATA_ROOT   := data/scans/
+LABELS_ROOT := data/labels/
 RUNS_DIR    := analysis/runs
 TIMESTAMP   := $(shell date +%Y%m%d-%H%M%S)
 OUTPUT_DIR  := $(RUNS_DIR)/$(TIMESTAMP)
 
-.PHONY: install test train clean build
+.PHONY: install label test train clean build
 
 ## install  — create venv and install package in editable mode with dev extras
 install:
 	./setup.sh
+
+## label    — extract features and assign rule labels; write per-bucket CSVs to data/scans/
+label:
+	$(VENV)/bin/risk-classifier-label \
+		--manifests-dir $(MANIFESTS) \
+		--data-root $(DATA_ROOT) \
+		--output-dir $(LABELS_ROOT)
 
 ## test     — run the full test suite
 test:
@@ -24,6 +32,7 @@ train:
 	$(VENV)/bin/risk-classifier-train \
 		--manifests-dir $(MANIFESTS) \
 		--data-root $(DATA_ROOT) \
+		--labels-dir $(LABELS_ROOT) \
 		--output-dir $(OUTPUT_DIR)
 
 ## build    — build a source distribution and wheel into dist/

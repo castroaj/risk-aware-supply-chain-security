@@ -22,10 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-# Two separate entry points are provided so that model developers (train) and
-# CI/CD pipeline operators (predict) each get a purpose-built command with only
-# the flags relevant to their workflow. Both commands are packaged in the same
-# wheel — install once, use either tool.
+risk-classifier-label   = "classifier.cli:main_label"
 risk-classifier-train   = "classifier.cli:main_train"
 risk-classifier-predict = "classifier.cli:main_predict"
 

@@ -105,27 +105,56 @@ def find_sbom_json(
     return None
 
 
+def write_labels_csv(df: pd.DataFrame, path: Path) -> None:
+    """
+    Persist a labeled bucket DataFrame to a CSV file for reproducible training.
+
+    WHAT:
+        Writes the REQUIRED_COLUMNS subset of the DataFrame to a CSV at `path`.
+        Creates any missing parent directories.
+
+    WHY:
+        Freezes feature values and rule labels at the time of scanning so that
+        subsequent training runs consume identical inputs. Label drift caused by
+        non-deterministic sources (Docker Hub API for base_image_age_days) becomes
+        visible as a diff rather than silently shifting model performance.
+
+    Args:
+        df:   DataFrame with at least REQUIRED_COLUMNS columns.
+        path: Destination path for the CSV file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    df[REQUIRED_COLUMNS].to_csv(path, index=False)
+    _log.info("write_labels_csv: wrote %d records to %s", len(df), path)
+
+
 def load_bucket(
-    manifest_csv: Path, bucket_name: str, data_root: Path
+    manifest_csv: Path,
+    bucket_name: str,
+    data_root: Path,
+    labels_csv: Optional[Path] = None,
 ) -> pd.DataFrame:
     """
     Read one image-list CSV manifest and build a labeled DataFrame for that bucket.
 
     WHAT:
-        For each row in the manifest CSV, locates the SBOM JSON file, calls
+        If `labels_csv` is provided and exists (and contains all REQUIRED_COLUMNS),
+        reads the pre-labeled CSV directly — skipping SBOM JSON parsing and
+        classify_metric() entirely. Otherwise, for each row in the manifest CSV,
+        locates the SBOM JSON file, calls
         sbom_extractor.build_security_metric_from_sbom() to extract the 9 features,
         calls sbom_extractor.classify_metric() to obtain the rule-based label, and
         accumulates results into a DataFrame.
 
     WHY:
-        Encapsulates the single-bucket loading loop so it can be called independently
-        (for partial loads or testing) and so that Trainer receives a ready DataFrame
-        rather than raw paths. Delegates all SBOM parsing to sbom_extractor to avoid
-        reimplementing extraction logic.
+        Pre-labeled CSVs (written by write_labels_csv / risk-classifier-label) freeze
+        feature values and rule labels so training is reproducible across runs.
+        Without them, classify_metric() is re-evaluated on every run and
+        base_image_age_days (which queries Docker Hub) can drift between runs.
 
     WHERE:
         Reads the manifest CSV and SBOM JSON files from the filesystem.
-        Logs warnings to stderr for missing files or parse failures; does not raise.
+        Logs warnings for missing files or parse failures; does not raise.
         Returns an empty DataFrame (with correct columns) if no records could be loaded.
 
     Args:
@@ -133,6 +162,9 @@ def load_bucket(
                       "image:tag,filename.json".
         bucket_name:  Key into BUCKET_LABEL_MAP for the bucket-level label.
         data_root:    Root directory containing SBOM JSON files.
+        labels_csv:   Optional path to a pre-labeled CSV written by write_labels_csv().
+                      If the file exists and has the expected columns, it is used
+                      directly and SBOM extraction is skipped.
 
     Returns:
         pd.DataFrame with columns: scan_file, image, bucket, bucket_label,
@@ -140,6 +172,27 @@ def load_bucket(
         high_cve_count, cvss_ge_7_count, max_cvss, unique_cwe_count,
         top25_cwe_count, base_image_age_days.
     """
+    if labels_csv is not None and labels_csv.exists():
+        _log.info("load_bucket: reading pre-labeled CSV %s", labels_csv)
+        df = pd.read_csv(labels_csv)
+        missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+        if missing:
+            _log.warning(
+                "load_bucket: pre-labeled CSV missing columns %s — falling back to extraction",
+                missing,
+            )
+        else:
+            _log.info(
+                "load_bucket: pre-labeled CSV loaded — %d records, bucket='%s'",
+                len(df), bucket_name,
+            )
+            return df
+    elif labels_csv is not None:
+        _log.warning(
+            "load_bucket: labels_csv not found at %s — falling back to extraction",
+            labels_csv,
+        )
+
     bucket_label = BUCKET_LABEL_MAP[bucket_name]
     records: List[dict] = []
 
@@ -191,7 +244,11 @@ def load_bucket(
     return pd.DataFrame(records, columns=REQUIRED_COLUMNS) if records else _empty_dataframe()
 
 
-def load_dataset(manifests_dir: Path, data_root: Path) -> pd.DataFrame:
+def load_dataset(
+    manifests_dir: Path,
+    data_root: Path,
+    labels_dir: Optional[Path] = None,
+) -> pd.DataFrame:
     """
     Load and concatenate all three training buckets into a single DataFrame.
 
@@ -213,6 +270,11 @@ def load_dataset(manifests_dir: Path, data_root: Path) -> pd.DataFrame:
     Args:
         manifests_dir: Directory containing the three manifest CSV files.
         data_root:     Root directory under which scan bucket directories live.
+        labels_dir:    Optional directory containing pre-labeled CSVs written by
+                       write_labels_csv() / risk-classifier-label. When provided,
+                       each bucket looks for {labels_dir}/{bucket_name}-labels.csv
+                       and uses it if present, falling back to fresh extraction
+                       if not.
 
     Returns:
         Concatenated pd.DataFrame of all successfully loaded records.
@@ -223,7 +285,8 @@ def load_dataset(manifests_dir: Path, data_root: Path) -> pd.DataFrame:
     frames: List[pd.DataFrame] = []
 
     for bucket_name, csv_file in _MANIFEST_FILES.items():
-        frame = load_bucket(manifests_dir / csv_file, bucket_name, data_root)
+        labels_csv = (labels_dir / f"{bucket_name}-labels.csv") if labels_dir else None
+        frame = load_bucket(manifests_dir / csv_file, bucket_name, data_root, labels_csv)
         if not frame.empty:
             frames.append(frame)
 

@@ -27,6 +27,7 @@ from classifier.data_loader import (
     load_bucket,
     load_dataset,
     metric_from_row,
+    write_labels_csv,
 )
 
 
@@ -230,3 +231,103 @@ class TestMetricFromRow:
         df = load_bucket(manifest_path, "high-qual", data_root)
         metric = metric_from_row(df.iloc[0])
         assert metric.scan_file != ""
+
+
+# ---------------------------------------------------------------------------
+# write_labels_csv
+# ---------------------------------------------------------------------------
+
+class TestWriteLabelsCsv:
+    def _make_df(self, tmp_path, bucket_name="high-qual", n=2):
+        """Build a minimal labeled DataFrame via load_bucket."""
+        manifest_path, data_root = TestLoadBucket()._setup_bucket(
+            tmp_path, n_images=n, bucket_name=bucket_name
+        )
+        return load_bucket(manifest_path, bucket_name, data_root)
+
+    def test_writes_expected_columns(self, tmp_path):
+        """CSV written by write_labels_csv contains exactly REQUIRED_COLUMNS."""
+        df = self._make_df(tmp_path)
+        out = tmp_path / "labels.csv"
+        write_labels_csv(df, out)
+        result = pd.read_csv(out)
+        assert list(result.columns) == REQUIRED_COLUMNS
+
+    def test_row_count_preserved(self, tmp_path):
+        """CSV contains the same number of rows as the input DataFrame."""
+        df = self._make_df(tmp_path, n=3)
+        out = tmp_path / "labels.csv"
+        write_labels_csv(df, out)
+        result = pd.read_csv(out)
+        assert len(result) == 3
+
+    def test_creates_parent_directory(self, tmp_path):
+        """write_labels_csv creates missing parent directories."""
+        df = self._make_df(tmp_path)
+        out = tmp_path / "nested" / "deep" / "labels.csv"
+        assert not out.parent.exists()
+        write_labels_csv(df, out)
+        assert out.exists()
+
+
+# ---------------------------------------------------------------------------
+# load_bucket with labels_csv
+# ---------------------------------------------------------------------------
+
+class TestLoadBucketWithLabelsCsv:
+    def _setup_bucket(self, tmp_path, bucket_name="high-qual", n=2):
+        manifest_path, data_root = TestLoadBucket()._setup_bucket(
+            tmp_path, n_images=n, bucket_name=bucket_name
+        )
+        return manifest_path, data_root
+
+    def test_reads_pre_labeled_csv_directly(self, tmp_path):
+        """When a valid labels_csv is supplied, the returned DataFrame matches it."""
+        manifest_path, data_root = self._setup_bucket(tmp_path)
+        # Generate label CSV via fresh extraction first
+        df_fresh = load_bucket(manifest_path, "high-qual", data_root)
+        labels_csv = tmp_path / "high-qual-labels.csv"
+        write_labels_csv(df_fresh, labels_csv)
+
+        # Load again using the pre-labeled CSV
+        df_labeled = load_bucket(manifest_path, "high-qual", data_root, labels_csv=labels_csv)
+        assert len(df_labeled) == len(df_fresh)
+        for col in REQUIRED_COLUMNS:
+            assert col in df_labeled.columns
+
+    def test_pre_labeled_csv_skips_sbom_extraction(self, tmp_path):
+        """load_bucket does not call build_security_metric_from_sbom when labels_csv is valid."""
+        from unittest.mock import patch
+
+        manifest_path, data_root = self._setup_bucket(tmp_path)
+        df_fresh = load_bucket(manifest_path, "high-qual", data_root)
+        labels_csv = tmp_path / "high-qual-labels.csv"
+        write_labels_csv(df_fresh, labels_csv)
+
+        with patch("classifier.data_loader.build_security_metric_from_sbom") as mock_extract:
+            load_bucket(manifest_path, "high-qual", data_root, labels_csv=labels_csv)
+            assert mock_extract.call_count == 0, "Extraction should be bypassed when labels_csv is valid"
+
+    def test_falls_back_when_labels_csv_missing(self, tmp_path, caplog):
+        """Falls back to fresh extraction with a WARNING when labels_csv path does not exist."""
+        manifest_path, data_root = self._setup_bucket(tmp_path)
+        missing_csv = tmp_path / "nonexistent-labels.csv"
+
+        with caplog.at_level(logging.WARNING, logger="classifier.data_loader"):
+            df = load_bucket(manifest_path, "high-qual", data_root, labels_csv=missing_csv)
+
+        assert not df.empty, "Should still return records via fallback extraction"
+        assert any("falling back to extraction" in r.message for r in caplog.records)
+
+    def test_falls_back_when_labels_csv_has_missing_columns(self, tmp_path, caplog):
+        """Falls back to fresh extraction when labels_csv is missing a required column."""
+        manifest_path, data_root = self._setup_bucket(tmp_path)
+        # Write a CSV that is missing the 'rule_label' column
+        broken_csv = tmp_path / "broken-labels.csv"
+        broken_csv.write_text("scan_file,image\nfoo.json,img:0\n", encoding="utf-8")
+
+        with caplog.at_level(logging.WARNING, logger="classifier.data_loader"):
+            df = load_bucket(manifest_path, "high-qual", data_root, labels_csv=broken_csv)
+
+        assert not df.empty, "Should still return records via fallback extraction"
+        assert any("missing columns" in r.message for r in caplog.records)

@@ -34,15 +34,35 @@ python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 
 ## Running the ML Classifier CLI
 
-Two separate entry points are provided — one for model development, one for pipeline use.
+Three separate entry points are provided — labeling, training, and prediction.
 
 ```bash
+# --- Labeling (run once after scanning, or after threshold changes) ---
+
+# Extract features and assign rule labels; write per-bucket CSVs to data/scans/
+make label
+
+# Or run directly:
+risk-classifier-label \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/
+# Writes: data/scans/high-qual-labels.csv
+#         data/scans/aged-stale-labels.csv
+#         data/scans/known-vuln-labels.csv
+
 # --- Training (model developer / data scientist) ---
 
-# Train using default paths — artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
+# Train using default paths — reads pre-labeled CSVs; artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
 make train
 
-# Train the Decision Tree on all three data buckets
+# Train the Decision Tree, consuming pre-labeled CSVs for reproducibility
+risk-classifier-train \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/ \
+    --labels-dir data/scans/ \
+    --output-dir analysis/
+
+# Train without pre-labeled CSVs (fresh extraction every run — not recommended for reproducibility)
 risk-classifier-train \
     --manifests-dir data/image-lists/ \
     --data-root data/scans/ \
@@ -135,18 +155,24 @@ This is an ML classifier for container image supply chain risk assessment. The p
 - `classify_metric(metric: SecurityMetric) -> str` returns `"BLOCK"`, `"WARN"`, or `"ALLOW"`
 - Used during dataset loading to populate the `rule_label` column that the Decision Tree trains against
 
+**Stage 3b — Label Persistence** (`src/classifier/data_loader.py`, `risk-classifier-label`)
+- `write_labels_csv(df, path)` — persists a labeled bucket DataFrame to CSV so rule labels are frozen at scan time
+- `risk-classifier-label` CLI command writes `{bucket}-labels.csv` per bucket to a configurable output directory
+- Training (`load_bucket`) consumes these CSVs via `--labels-dir` to skip live feature extraction and `classify_metric()` on every run
+- Label drift (caused by threshold changes or Docker Hub API non-determinism on `base_image_age_days`) becomes a visible `git diff` on the label CSV rather than a silent accuracy drop
+
 **Stage 4 — ML Training and Prediction** (`src/classifier/`)
-- `data_loader.py` — reads bucket manifests, calls the extractor for each SBOM, builds a labeled DataFrame
+- `data_loader.py` — reads bucket manifests, optionally reads pre-labeled CSVs, calls the extractor for each SBOM, builds a labeled DataFrame
 - `trainer.py` (`Trainer`) — fits a `DecisionTreeClassifier`, runs stratified K-fold CV, returns a `TrainingResult`
 - `predictor.py` (`Predictor`) — loads saved pkl artifacts and exposes `predict(metric)` / `predict_from_dict(dict)`
 - `results.py` (`TrainingConfig`, `TrainingResult`) — hyperparameter dataclass and training output bundle; also contains all visualization and reporting functions
-- `cli.py` — `train` and `predict` subcommands; registered as the `risk-classifier` console script via `pyproject.toml`
+- `cli.py` — `label`, `train`, and `predict` subcommands; registered as separate console scripts via `pyproject.toml`
 
 ## Package Layout
 
 ```
-pyproject.toml               # Build configuration, dependencies, and risk-classifier entrypoint
-Makefile                     # install / test / train / build / clean targets
+pyproject.toml               # Build configuration, dependencies, and three console script entry points
+Makefile                     # install / label / test / train / build / clean targets
 src/
   classifier/
     __init__.py              # Public API: Trainer, Predictor, TrainingConfig, TrainingResult,
@@ -157,7 +183,7 @@ src/
     trainer.py               # DecisionTreeClassifier training pipeline
     predictor.py             # ML inference from saved artifacts
     results.py               # TrainingConfig, TrainingResult, visualization and reporting functions
-    cli.py                   # Train and predict CLI entry point
+    cli.py                   # Label, train, and predict CLI entry points
 tests/
   conftest.py                # sys.path fallback for uninstalled environments; no-op after editable install
   test_data_loader.py

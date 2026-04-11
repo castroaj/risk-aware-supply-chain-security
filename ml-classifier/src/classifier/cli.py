@@ -58,7 +58,7 @@ from argparse import (
 from pathlib import Path
 
 from classifier import sbom_extractor as _extractor
-from classifier.data_loader import load_dataset
+from classifier.data_loader import BUCKET_LABEL_MAP, load_bucket, load_dataset, write_labels_csv
 from classifier.predictor import Predictor
 from classifier.trainer import Trainer, TrainingConfig
 
@@ -214,6 +214,17 @@ def _parse_train_args() -> Namespace:
         default=False,
         help="Skip saving the text classification report.",
     )
+    parser.add_argument(
+        "--labels-dir",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help=(
+            "Directory containing pre-labeled CSVs written by risk-classifier-label "
+            "(e.g. high-qual-labels.csv). If omitted, features are extracted fresh "
+            "from SBOM files on every run."
+        ),
+    )
     _add_logging_args(parser)
     return parser.parse_args()
 
@@ -285,7 +296,7 @@ def _run_train(args: Namespace) -> None:
     )
 
     print(f"Loading dataset from manifests: {args.manifests_dir}")
-    df = load_dataset(args.manifests_dir, args.data_root)
+    df = load_dataset(args.manifests_dir, args.data_root, labels_dir=args.labels_dir)
     print(f"Loaded {len(df)} images across {df['bucket'].nunique()} buckets.")
     _log.info("train: dataset loaded — %d images, %d buckets", len(df), df["bucket"].nunique())
     print(df.groupby(["bucket", "rule_label"]).size().unstack(fill_value=0))
@@ -372,9 +383,82 @@ def _run_predict(args: Namespace) -> None:
         print(output_text)
 
 
+def _parse_label_args() -> Namespace:
+    """
+    Parse arguments for the risk-classifier-label entry point.
+
+    Returns:
+        Parsed Namespace with manifests_dir, data_root, output_dir, and logging fields.
+    """
+    parser = ArgumentParser(
+        prog="risk-classifier-label",
+        description=(
+            "Risk-Aware Supply Chain Security — Extract features and assign rule labels "
+            "from SBOM scan data. Writes one <bucket>-labels.csv per bucket to --output-dir "
+            "so that subsequent training runs consume frozen, reproducible labels."
+        ),
+        formatter_class=ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--manifests-dir",
+        type=_existing_dir,
+        required=True,
+        metavar="DIR",
+        help="Directory containing high-qual.csv, aged-stale.csv, known-vuln.csv.",
+    )
+    parser.add_argument(
+        "--data-root",
+        type=_existing_dir,
+        required=True,
+        metavar="DIR",
+        help="Root directory containing SBOM JSON files (organised by bucket subdir).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="Directory to write per-bucket label CSVs (default: same as --data-root).",
+    )
+    _add_logging_args(parser)
+    return parser.parse_args()
+
+
+def _run_label(args: Namespace) -> None:
+    """Execute the label subcommand."""
+    _log = logging.getLogger(__name__)
+    output_dir = args.output_dir if args.output_dir is not None else args.data_root
+
+    for bucket_name in BUCKET_LABEL_MAP:
+        manifest_csv = args.manifests_dir / f"{bucket_name}.csv"
+        df = load_bucket(manifest_csv, bucket_name, args.data_root)
+        if df.empty:
+            _log.warning("label: bucket '%s' produced no records — skipping CSV write", bucket_name)
+            continue
+        out_path = output_dir / f"{bucket_name}-labels.csv"
+        write_labels_csv(df, out_path)
+        print(f"  {bucket_name}: {len(df)} records → {out_path}")
+
+    print("Done.")
+
+
 # ---------------------------------------------------------------------------
 # Entry points — registered as separate console scripts in pyproject.toml
 # ---------------------------------------------------------------------------
+
+def main_label() -> None:
+    """
+    Entry point for the risk-classifier-label command.
+
+    Intended user: data scientists and pipeline operators who want reproducible
+    training labels. Run once after scanning (or after threshold changes) to
+    freeze feature values and rule labels into per-bucket CSVs. These CSVs are
+    consumed by risk-classifier-train via --labels-dir.
+    """
+    args = _parse_label_args()
+    _configure_logging(args.log_level, args.log_file)
+    _run_label(args)
+
 
 def main_train() -> None:
     """
