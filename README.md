@@ -47,13 +47,14 @@ The `ml-classifier/` directory contains the active implementation of the pipelin
 - Issues ALLOW / WARN / BLOCK predictions with confidence scores for new SBOM inputs
 - Emits structured INFO/DEBUG logs to stdout (and optionally a file) so every classification decision is auditable
 
-### Two CLI entry points
+### Three CLI entry points
 
-The toolkit ships as a single wheel with two purpose-built commands:
+The toolkit ships as a single wheel with three purpose-built commands:
 
 | Command | User | Purpose |
 |---|---|---|
-| `risk-classifier-train` | Data scientist / model developer | Train the Decision Tree on SBOM scan datasets; writes pkl artifacts, a classification report, and visualisations |
+| `risk-classifier-label` | Data scientist / pipeline operator | Extract features from SBOM scan data and assign rule-based labels; writes one `<bucket>-labels.csv` per bucket. Run once after scanning to freeze reproducible labels. |
+| `risk-classifier-train` | Data scientist / model developer | Train the Decision Tree from pre-labeled CSVs; writes pkl artifacts, a classification report, and visualizations to a timestamped output directory |
 | `risk-classifier-predict` | CI/CD pipeline / security engineer | Load saved model artifacts and classify one or more SBOM files; outputs JSON or CSV |
 
 ```bash
@@ -61,24 +62,29 @@ The toolkit ships as a single wheel with two purpose-built commands:
 cd ml-classifier
 make install && source .venv/bin/activate
 
-# Train
-risk-classifier-train \
+# Step 1 — freeze rule labels from scan data (run once after scanning)
+risk-classifier-label \
     --manifests-dir data/image-lists/ \
     --data-root data/scans/ \
-    --output-dir analysis/
+    --output-dir data/labels/
 
-# Predict
+# Step 2 — train the Decision Tree from frozen labels
+risk-classifier-train \
+    --labels-dir data/labels/ \
+    --output-dir training-runs/
+
+# Step 3 — predict (CI/CD or ad-hoc)
 risk-classifier-predict \
     --sbom path/to/image.json \
-    --artifact-dir analysis/ \
+    --artifact-dir training-runs/<YYYYMMDD-HHMMSS>/ \
     --format json
 ```
 
-Both commands accept `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file FILE` for audit logging.
+All three commands accept `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file FILE` for audit logging.
 
-### Current model — v0.0.1
+### Current model — v0.1.0
 
-Trained on 143 container images across three label buckets.
+Trained on 143 container images across three label buckets (ALLOW=35, BLOCK=61, WARN=47).
 
 | Metric | Value |
 |---|---|
@@ -89,7 +95,9 @@ Trained on 143 container images across three label buckets.
 | WARN F1 | 0.95 |
 | BLOCK F1 | 0.96 |
 
-Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.1/`](./ml-classifier/model-results/model-0.0.1/).
+Hyperparameters: `max_depth=5`, `min_samples_split=4`, `min_samples_leaf=2`, `class_weight=balanced`, `random_state=42`.
+
+Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.1/`](./ml-classifier/model-results/model-0.0.1/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
 
 ### Feature vector (9 features)
 
