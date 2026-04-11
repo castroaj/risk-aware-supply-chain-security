@@ -31,6 +31,8 @@ from sklearn.metrics import ConfusionMatrixDisplay
 from sklearn.preprocessing import LabelEncoder
 from sklearn.tree import DecisionTreeClassifier, export_text, plot_tree
 
+from .sbom_extractor import FEATURES
+
 
 # Short axis labels for the correlation heatmap so axis text doesn't overlap.
 _SHORT_LABELS = [
@@ -387,13 +389,12 @@ def plot_correlation_matrix(df: pd.DataFrame, output_dir: Path) -> Path:
     Returns:
         Path of the saved PNG file.
     """
-    import sbom_extractor as _extractor
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / "feature_correlation_matrix.png"
 
-    corr = df[_extractor.FEATURES].corr()
+    corr = df[FEATURES].corr()
 
     mask = np.zeros_like(corr, dtype=bool)
     mask[np.triu_indices_from(mask)] = True  # hide upper triangle (redundant)
