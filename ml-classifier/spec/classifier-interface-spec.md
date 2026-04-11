@@ -240,7 +240,23 @@ risk-classifier predict \
 
 ---
 
-## 6. Constraints and Limitations
+## 6. Development Workflow
+
+The `Makefile` in `ml-classifier/` provides targets for all common development tasks. Run `make help` for a summary.
+
+| Target | Command | Description |
+|---|---|---|
+| `make install` | `./setup.sh` | Create `.venv` and install the package in editable mode with dev extras |
+| `make test` | `pytest tests/ -v` | Run the full test suite |
+| `make train` | `risk-classifier train ...` | Train on all three buckets with default paths (`data/image-lists/`, `data/scans/`, `analysis/`) |
+| `make build` | `python -m build` | Build a source distribution and wheel into `dist/` |
+| `make clean` | — | Remove `dist/`, `build/`, `*.egg-info`, and `__pycache__` trees |
+
+**Prerequisite for all `risk-classifier` commands:** the package must be installed (`make install` or `pip install -e .`) and the venv must be active (`source .venv/bin/activate`).
+
+---
+
+## 7. Constraints and Limitations
 
 - **All three manifests required for a balanced training set.** Missing any single bucket degrades class balance. Training continues with available data but `class_weight="balanced"` only partially compensates.
 

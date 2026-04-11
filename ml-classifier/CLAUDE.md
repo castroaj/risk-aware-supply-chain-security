@@ -35,6 +35,9 @@ python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 ## Running the ML Classifier CLI
 
 ```bash
+# Train using default paths (shorthand via Makefile)
+make train
+
 # Train the Decision Tree on all three data buckets
 risk-classifier train \
     --manifests-dir data/image-lists/ \
@@ -58,8 +61,8 @@ risk-classifier predict \
 ## Running Tests
 
 ```bash
-# Run the full test suite from the ml-classifier/ directory
-python -m pytest tests/ -v
+make test                    # shorthand
+python -m pytest tests/ -v   # equivalent
 ```
 
 Tests live in `tests/` and cover `data_loader`, `trainer`, `predictor`, and `reporting`. `tests/conftest.py` adds `src/` to `sys.path` as a fallback for uninstalled environments. After `pip install -e '.[dev]'`, the `classifier` package is importable via site-packages and this manipulation is a no-op.

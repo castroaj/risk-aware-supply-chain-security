@@ -16,7 +16,7 @@ ml-classifier/                      # Only active code — feature extraction, c
   scripts/                          # Trivy scan scripts
   data/                             # Image lists (CSV) and pre-scanned SBOM JSON files
   analysis/                         # Statistics script and dataset analysis docs
-  pyproject.toml / setup.sh / CLAUDE.md
+  pyproject.toml / Makefile / setup.sh / CLAUDE.md
 research/               # Design research docs (SBOM, SAST, dynamic scanning, ML model)
 documentation/          # SRS, design diagrams, meeting notes
 software-prototype/     # Placeholder (not yet implemented)
@@ -29,8 +29,9 @@ See `ml-classifier/CLAUDE.md` for full commands. Quick reference:
 ```bash
 cd ml-classifier
 
-# Environment setup
-./setup.sh && source .venv/bin/activate
+# Environment setup (Makefile shorthand or direct)
+make install && source .venv/bin/activate
+# equivalent: ./setup.sh && source .venv/bin/activate
 
 # Run feature extractor on a single SBOM file
 python src/classifier/sbom_extractor.py -s <path/to/sbom.json>
