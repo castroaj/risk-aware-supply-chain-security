@@ -119,6 +119,8 @@ All artifacts are written to `output_dir`. The three pkl files form an **insepar
 | Decision tree | `decision_tree.png` | PNG, 150 dpi | Rendered tree (max_depth=5) with filled nodes and impurity values |
 | Feature importances | `feature_importances.png` | PNG, 150 dpi | Bar chart sorted descending by Gini importance |
 | Correlation matrix | `feature_correlation_matrix.png` | PNG, 150 dpi | Lower-triangle Pearson correlation heatmap (full dataset) |
+| Dataset snapshot (CSV) | `dataset_snapshot.csv` | UTF-8 CSV | Full labeled DataFrame used for this run: `scan_file, image, bucket, bucket_label, rule_label` + 9 features. Enables exact run reproduction and cross-run label diffing. |
+| Dataset snapshot (JSON) | `dataset_snapshot.json` | UTF-8 JSON | Same content as the CSV, serialized as a JSON array of objects (records orientation, indented). Easier to inspect directly or load into ad-hoc scripts. |
 
 ---
 

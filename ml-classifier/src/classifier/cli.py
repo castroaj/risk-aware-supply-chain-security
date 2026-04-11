@@ -3,12 +3,20 @@ cli.py
 ======
 CLI entry points for the risk-classifier toolkit.
 
-Two independent commands are registered as separate console scripts:
+Three independent commands are registered as separate console scripts:
+
+    risk-classifier-label    — labeling workflow.
+                               Extracts features from SBOM scan data and
+                               assigns rule-based labels, writing one
+                               <bucket>-labels.csv per bucket. Run once
+                               after scanning to freeze labels for
+                               reproducible training.
 
     risk-classifier-train    — data-science / model-development workflow.
-                               Loads SBOM scan data, trains a Decision Tree,
-                               and writes pkl artifacts, a text report, and
-                               visualisation PNGs to an output directory.
+                               Loads SBOM scan data (or pre-labeled CSVs),
+                               trains a Decision Tree, and writes pkl
+                               artifacts, a text report, visualizations,
+                               and a dataset snapshot to an output directory.
 
     risk-classifier-predict  — CI/CD / runtime workflow.
                                Loads saved model artifacts and classifies one
@@ -16,10 +24,10 @@ Two independent commands are registered as separate console scripts:
                                ALLOW/WARN/BLOCK predictions to stdout or a
                                file in JSON or CSV format.
 
-The two entry points are intentionally separate because they serve different
-users with different concerns: model developers need training controls
-(hyperparameters, data paths, report flags) while pipeline consumers only
-need to point at an SBOM and an artifact directory.
+The three entry points are intentionally separate because they serve different
+users: pipeline operators label once after scanning, model developers train
+on demand, and CI/CD consumers only need to point at an SBOM and an artifact
+directory.
 
 Both commands share the --log-level / --log-file logging flags defined in
 _add_logging_args() and the _configure_logging() setup function.
@@ -58,7 +66,7 @@ from argparse import (
 from pathlib import Path
 
 from classifier import sbom_extractor as _extractor
-from classifier.data_loader import BUCKET_LABEL_MAP, load_bucket, load_dataset, write_labels_csv
+from classifier.data_loader import BUCKET_LABEL_MAP, load_bucket, load_dataset, write_labels_csv, write_labels_json
 from classifier.predictor import Predictor
 from classifier.trainer import Trainer, TrainingConfig
 
@@ -295,42 +303,44 @@ def _run_train(args: Namespace) -> None:
         config.test_size, config.random_state,
     )
 
-    print(f"Loading dataset from manifests: {args.manifests_dir}")
+    _log.info("train: loading dataset from manifests: %s", args.manifests_dir)
     df = load_dataset(args.manifests_dir, args.data_root, labels_dir=args.labels_dir)
-    print(f"Loaded {len(df)} images across {df['bucket'].nunique()} buckets.")
     _log.info("train: dataset loaded — %d images, %d buckets", len(df), df["bucket"].nunique())
-    print(df.groupby(["bucket", "rule_label"]).size().unstack(fill_value=0))
+    _log.info(
+        "train: label distribution\n%s",
+        df.groupby(["bucket", "rule_label"]).size().unstack(fill_value=0).to_string(),
+    )
 
-    print("\nTraining Decision Tree classifier...")
+    _log.info("train: fitting Decision Tree classifier")
     trainer = Trainer(df, config)
     result = trainer.train()
 
-    print(f"\nTest Accuracy : {result.test_accuracy:.4f}")
     cv_mean = result.cv_scores.mean()
     cv_std = result.cv_scores.std()
-    print(f"CV Accuracy   : {cv_mean:.4f} ± {cv_std:.4f} ({len(result.cv_scores)}-fold)")
     _log.info(
         "train: test_accuracy=%.4f CV=%.4f±%.4f (%d-fold)",
         result.test_accuracy, cv_mean, cv_std, len(result.cv_scores),
     )
-    print("\nClassification Report:")
-    print(result.class_report_str)
+    _log.info("train: classification report\n%s", result.class_report_str)
 
-    print(f"\nSaving model artifacts to {args.output_dir}/")
+    _log.info("train: saving artifacts to %s", args.output_dir)
     trainer.save_artifacts(result, args.output_dir)
-    _log.info("train: artifacts saved to %s", args.output_dir)
+
+    write_labels_csv(df, args.output_dir / "dataset_snapshot.csv")
+    write_labels_json(df, args.output_dir / "dataset_snapshot.json")
+    _log.info("train: dataset snapshot saved to %s (.csv + .json)", args.output_dir)
 
     if not args.no_report:
         report_path = result.write_report(args.output_dir)
-        print(f"Report saved → {report_path}")
+        _log.info("train: report saved to %s", report_path)
 
     if not args.no_plots:
-        print("Saving visualizations...")
+        _log.info("train: saving visualizations")
         png_paths = result.save_visualizations(df, args.output_dir)
         for p in png_paths:
-            print(f"  → {p}")
+            _log.info("train: visualization saved → %s", p)
 
-    print("\nDone.")
+    _log.info("train: done")
 
 
 def _run_predict(args: Namespace) -> None:
@@ -378,7 +388,7 @@ def _run_predict(args: Namespace) -> None:
 
     if args.output:
         args.output.write_text(output_text, encoding="utf-8")
-        print(f"Predictions written to {args.output}")
+        _log.info("predict: predictions written to %s", args.output)
     else:
         print(output_text)
 
@@ -437,9 +447,9 @@ def _run_label(args: Namespace) -> None:
             continue
         out_path = output_dir / f"{bucket_name}-labels.csv"
         write_labels_csv(df, out_path)
-        print(f"  {bucket_name}: {len(df)} records → {out_path}")
+        _log.info("label: bucket='%s' — %d records written to %s", bucket_name, len(df), out_path)
 
-    print("Done.")
+    _log.info("label: done")
 
 
 # ---------------------------------------------------------------------------

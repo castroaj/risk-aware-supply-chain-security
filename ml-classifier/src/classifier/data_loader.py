@@ -128,6 +128,32 @@ def write_labels_csv(df: pd.DataFrame, path: Path) -> None:
     _log.info("write_labels_csv: wrote %d records to %s", len(df), path)
 
 
+def write_labels_json(df: pd.DataFrame, path: Path) -> None:
+    """
+    Persist a labeled bucket DataFrame to a JSON file (records orientation).
+
+    WHAT:
+        Writes the REQUIRED_COLUMNS subset of the DataFrame to a JSON file at
+        `path` as a list of objects (one per image), indented for readability.
+        Creates any missing parent directories.
+
+    WHY:
+        Complements write_labels_csv() with a human-readable format. JSON is
+        easier to inspect directly and to load into ad-hoc analysis scripts
+        without specifying column types.
+
+    Args:
+        df:   DataFrame with at least REQUIRED_COLUMNS columns.
+        path: Destination path for the JSON file.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        df[REQUIRED_COLUMNS].to_json(orient="records", indent=2),
+        encoding="utf-8",
+    )
+    _log.info("write_labels_json: wrote %d records to %s", len(df), path)
+
+
 def load_bucket(
     manifest_csv: Path,
     bucket_name: str,
