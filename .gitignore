@@ -2,6 +2,7 @@
 __pycache__
 *vuln-scan/
 ml-classifier/data/scans/
+ml-classifier/analysis/runs/*
 
 software-prototype/.venv/
 software-prototype/dist/
