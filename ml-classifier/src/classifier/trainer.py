@@ -164,6 +164,7 @@ class Trainer:
         _log.debug("train: per-fold CV scores %s", cv_scores.tolist())
 
         return TrainingResult(
+            config=config,
             model=clf,
             label_encoder=le,
             feature_names=list(_extractor.FEATURES),

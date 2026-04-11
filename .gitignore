@@ -4,7 +4,7 @@ __pycache__
 ml-classifier/src/*egg-info
 ml-classifier/data/scans/
 ml-classifier/data/labels/
-ml-classifier/analysis/runs/*
+ml-classifier/training-runs/*
 
 software-prototype/.venv/
 software-prototype/dist/

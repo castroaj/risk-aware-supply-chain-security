@@ -85,6 +85,7 @@ class TrainingResult:
         trainer.save_artifacts(result, output_dir)
     """
 
+    config: TrainingConfig
     model: DecisionTreeClassifier
     label_encoder: LabelEncoder
     feature_names: List[str]
@@ -227,6 +228,7 @@ def write_classification_report(result: TrainingResult, output_dir: Path) -> Pat
 
     tree_rules = export_text(result.model, feature_names=result.feature_names)
 
+    cfg = result.config
     lines = [
         "Risk-Aware Supply Chain Security — Decision Tree Classifier",
         "=" * 60,
@@ -234,6 +236,16 @@ def write_classification_report(result: TrainingResult, output_dir: Path) -> Pat
         f"Dataset size       : {result.dataset_size} images",
         f"Train / Test split : {result.train_size} / {result.test_size_actual}",
         f"Class distribution : {class_dist_str}",
+        "",
+        "Hyperparameters:",
+        f"  criterion         : {cfg.criterion}",
+        f"  max_depth         : {cfg.max_depth}",
+        f"  min_samples_split : {cfg.min_samples_split}",
+        f"  min_samples_leaf  : {cfg.min_samples_leaf}",
+        f"  class_weight      : {cfg.class_weight}",
+        f"  random_state      : {cfg.random_state}",
+        f"  test_size         : {cfg.test_size:.2f}",
+        f"  cv_folds          : {cfg.cv_folds}",
         "",
         f"Test Accuracy      : {result.test_accuracy:.4f}",
         f"CV Accuracy        : {cv_mean:.4f} ± {cv_std:.4f} ({cv_folds}-fold stratified)",

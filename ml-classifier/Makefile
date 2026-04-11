@@ -5,7 +5,7 @@ PIP         := $(VENV)/bin/pip
 MANIFESTS   := data/image-lists/
 DATA_ROOT   := data/scans/
 LABELS_ROOT := data/labels/
-RUNS_DIR    := analysis/runs
+RUNS_DIR    := training-runs
 TIMESTAMP   := $(shell date +%Y%m%d-%H%M%S)
 OUTPUT_DIR  := $(RUNS_DIR)/$(TIMESTAMP)
 
@@ -26,7 +26,7 @@ label:
 test:
 	$(PYTHON) -m pytest tests/ -v
 
-## train    — train the Decision Tree; artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
+## train    — train the Decision Tree; artifacts written to training-runs/YYYYMMDD-HHMMSS/
 train:
 	@echo "Output dir: $(OUTPUT_DIR)"
 	$(VENV)/bin/risk-classifier-train \

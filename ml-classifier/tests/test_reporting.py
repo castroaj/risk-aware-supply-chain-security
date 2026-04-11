@@ -59,17 +59,32 @@ class TestWriteClassificationReport:
         assert path.is_file()
 
     def test_contains_required_sections(self, training_result, tmp_path):
-        """Report file contains all four required section headings."""
+        """Report file contains all required section headings."""
         path = write_classification_report(training_result, tmp_path)
         content = path.read_text(encoding="utf-8")
 
         for heading in [
+            "Hyperparameters",
             "Test Accuracy",
             "CV Accuracy",
             "Classification Report",
             "Decision Tree Rules",
         ]:
             assert heading in content, f"Missing required section: '{heading}'"
+
+    def test_hyperparameters_in_report(self, training_result, tmp_path):
+        """Report contains all TrainingConfig hyperparameter values."""
+        path = write_classification_report(training_result, tmp_path)
+        content = path.read_text(encoding="utf-8")
+        cfg = training_result.config
+
+        assert f"criterion         : {cfg.criterion}" in content
+        assert f"max_depth         : {cfg.max_depth}" in content
+        assert f"min_samples_split : {cfg.min_samples_split}" in content
+        assert f"min_samples_leaf  : {cfg.min_samples_leaf}" in content
+        assert f"class_weight      : {cfg.class_weight}" in content
+        assert f"random_state      : {cfg.random_state}" in content
+        assert f"cv_folds          : {cfg.cv_folds}" in content
 
     def test_accuracy_value_matches_result(self, training_result, tmp_path):
         """The Test Accuracy value written to the report matches result.test_accuracy."""

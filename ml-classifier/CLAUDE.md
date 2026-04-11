@@ -52,7 +52,7 @@ risk-classifier-label \
 
 # --- Training (model developer / data scientist) ---
 
-# Train using default paths — reads pre-labeled CSVs; artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
+# Train using default paths — reads pre-labeled CSVs; artifacts written to training-runs/YYYYMMDD-HHMMSS/
 make train
 
 # Train the Decision Tree, consuming pre-labeled CSVs for reproducibility

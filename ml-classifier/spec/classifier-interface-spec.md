@@ -289,7 +289,7 @@ The `Makefile` in `ml-classifier/` provides targets for all common development t
 |---|---|---|
 | `make install` | `./setup.sh` | Create `.venv` and install the package in editable mode with dev extras |
 | `make test` | `pytest tests/ -v` | Run the full test suite |
-| `make train` | `risk-classifier-train ...` | Train on all three buckets; artifacts written to `analysis/runs/YYYYMMDD-HHMMSS/` |
+| `make train` | `risk-classifier-train ...` | Train on all three buckets; artifacts written to `training-runs/YYYYMMDD-HHMMSS/` |
 | `make build` | `python -m build` | Build a source distribution and wheel into `dist/` |
 | `make clean` | — | Remove `dist/`, `build/`, `*.egg-info`, and `__pycache__` trees |
 
