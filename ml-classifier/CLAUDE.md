@@ -35,7 +35,7 @@ python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 ## Running the ML Classifier CLI
 
 ```bash
-# Train using default paths (shorthand via Makefile)
+# Train using default paths — artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
 make train
 
 # Train the Decision Tree on all three data buckets

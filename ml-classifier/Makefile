@@ -4,7 +4,9 @@ PIP         := $(VENV)/bin/pip
 
 MANIFESTS   := data/image-lists/
 DATA_ROOT   := data/scans/
-OUTPUT_DIR  := analysis/
+RUNS_DIR    := analysis/runs
+TIMESTAMP   := $(shell date +%Y%m%d-%H%M%S)
+OUTPUT_DIR  := $(RUNS_DIR)/$(TIMESTAMP)
 
 .PHONY: install test train clean build
 
@@ -16,8 +18,9 @@ install:
 test:
 	$(PYTHON) -m pytest tests/ -v
 
-## train    — train the Decision Tree on all three SBOM buckets
+## train    — train the Decision Tree; artifacts written to analysis/runs/YYYYMMDD-HHMMSS/
 train:
+	@echo "Output dir: $(OUTPUT_DIR)"
 	$(VENV)/bin/risk-classifier train \
 		--manifests-dir $(MANIFESTS) \
 		--data-root $(DATA_ROOT) \
