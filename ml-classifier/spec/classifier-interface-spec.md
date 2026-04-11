@@ -1,9 +1,9 @@
 # ML Classifier Interface Specification
 
 **Component:** `src/classifier/` — Risk-Aware Supply Chain Security
-**Version:** 1.0
+**Version:** 1.1
 **Author:** Alexander Castro
-**Date:** 2026-04-06
+**Date:** 2026-04-11
 
 ---
 
@@ -84,7 +84,7 @@ image:tag,output-filename.json
 2. `data_root/{filename}` — flat layout
 3. Recursive glob under `data_root` — fallback
 
-Missing files emit a warning to stderr and are skipped; they do not abort the load.
+Missing files emit a `WARNING` log record via the `classifier.data_loader` logger and are skipped; they do not abort the load.
 
 #### Hyperparameters (`TrainingConfig` defaults)
 
@@ -179,10 +179,17 @@ When the two classifiers disagree, neither is automatically authoritative. Docum
 
 ## 5. CLI Interface
 
-### 5.1 `train` subcommand
+The toolkit ships as a single wheel with **two separate entry points**. They serve different users and are intentionally independent — each has only the flags relevant to its workflow.
+
+| Entry point | Intended user | Registered in `pyproject.toml` |
+|---|---|---|
+| `risk-classifier-train` | Data scientist / model developer | `classifier.cli:main_train` |
+| `risk-classifier-predict` | CI/CD pipeline / security engineer | `classifier.cli:main_predict` |
+
+### 5.1 `risk-classifier-train`
 
 ```
-risk-classifier train --manifests-dir DIR --data-root DIR [options]
+risk-classifier-train --manifests-dir DIR --data-root DIR [options]
 ```
 
 | Flag | Type | Default | Description |
@@ -197,11 +204,13 @@ risk-classifier train --manifests-dir DIR --data-root DIR [options]
 | `--random-state` | int | `42` | Random seed |
 | `--no-plots` | flag | `False` | Skip saving visualization PNGs |
 | `--no-report` | flag | `False` | Skip saving the text report |
+| `--log-level` | `DEBUG`\|`INFO`\|`WARNING`\|`ERROR` | `INFO` | Logging verbosity; INFO is sufficient for auditing, DEBUG shows per-feature extraction detail |
+| `--log-file` | Path | (none) | Also write log records to this file in addition to stdout |
 
-### 5.2 `predict` subcommand
+### 5.2 `risk-classifier-predict`
 
 ```
-risk-classifier predict --sbom PATH --artifact-dir DIR [options]
+risk-classifier-predict --sbom PATH --artifact-dir DIR [options]
 ```
 
 | Flag | Type | Default | Description |
@@ -210,32 +219,62 @@ risk-classifier predict --sbom PATH --artifact-dir DIR [options]
 | `--artifact-dir` | Path (required) | — | Directory containing the three pkl files |
 | `--format` | `json`\|`csv` | `json` | Output format |
 | `--output` | Path | (stdout) | Write output to this file instead of stdout |
+| `--log-level` | `DEBUG`\|`INFO`\|`WARNING`\|`ERROR` | `INFO` | Logging verbosity |
+| `--log-file` | Path | (none) | Also write log records to this file in addition to stdout |
 
-`--sbom` accepts both a single `.json` file and a directory. Directory mode processes all `*.json` files found, matching the `-s` behavior of `sbom_extractor.py`.
+`--sbom` accepts both a single `.json` file and a directory. Directory mode processes all `*.json` files found.
 
-### 5.3 Usage examples
+### 5.3 Logging
+
+Both commands emit structured log records to **stdout** (not stderr) via Python's `logging` module. The root logger is `classifier`; per-module loggers follow the `classifier.<module>` hierarchy (e.g. `classifier.data_loader`, `classifier.sbom_extractor`).
+
+Log format: `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
+
+**INFO records relevant to auditing:**
+- Every ALLOW/WARN/BLOCK classification decision with the triggering field, its value, and the threshold
+- Every ML prediction with `scan_file`, label, and confidence
+- Dataset load counts per bucket
+- Training split sizes, hyperparameters, test accuracy, and CV accuracy
+
+**DEBUG records relevant to development:**
+- Per-feature extracted value for each SBOM
+- Per-fold CV scores
+- Docker Hub API URL and timeout outcomes
+- Date parse format matched
+
+### 5.4 Usage examples
 
 **Minimum viable training:**
 ```bash
-risk-classifier train \
+risk-classifier-train \
     --manifests-dir data/image-lists/ \
     --data-root data/scans/
 ```
 
+**Training with audit log written to file:**
+```bash
+risk-classifier-train \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/ \
+    --output-dir analysis/ \
+    --log-file analysis/train-audit.log
+```
+
 **Predict from a single SBOM (JSON output to stdout):**
 ```bash
-risk-classifier predict \
+risk-classifier-predict \
     --sbom data/scans/high-qual/alpine-3.18.json \
     --artifact-dir analysis/
 ```
 
-**Predict from a directory, write CSV to file:**
+**Predict from a directory, write CSV to file, with audit log:**
 ```bash
-risk-classifier predict \
+risk-classifier-predict \
     --sbom data/scans/high-qual/ \
     --artifact-dir analysis/ \
     --format csv \
-    --output results.csv
+    --output results.csv \
+    --log-file pipeline-audit.log
 ```
 
 ---
@@ -248,7 +287,7 @@ The `Makefile` in `ml-classifier/` provides targets for all common development t
 |---|---|---|
 | `make install` | `./setup.sh` | Create `.venv` and install the package in editable mode with dev extras |
 | `make test` | `pytest tests/ -v` | Run the full test suite |
-| `make train` | `risk-classifier train ...` | Train on all three buckets; artifacts written to `analysis/runs/YYYYMMDD-HHMMSS/` |
+| `make train` | `risk-classifier-train ...` | Train on all three buckets; artifacts written to `analysis/runs/YYYYMMDD-HHMMSS/` |
 | `make build` | `python -m build` | Build a source distribution and wheel into `dist/` |
 | `make clean` | — | Remove `dist/`, `build/`, `*.egg-info`, and `__pycache__` trees |
 
