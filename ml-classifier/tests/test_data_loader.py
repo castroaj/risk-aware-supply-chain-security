@@ -14,12 +14,13 @@ Tests cover:
 
 import csv
 import json
+import logging
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-import sbom_extractor as _extractor
+from classifier import sbom_extractor as _extractor
 from classifier.data_loader import (
     REQUIRED_COLUMNS,
     find_sbom_json,
@@ -127,7 +128,7 @@ class TestLoadBucket:
         for col in REQUIRED_COLUMNS:
             assert col in df.columns, f"Missing column: {col}"
 
-    def test_skips_missing_sbom_without_raising(self, tmp_path, capsys):
+    def test_skips_missing_sbom_without_raising(self, tmp_path, caplog):
         """Rows referencing missing SBOM files are warned and skipped."""
         data_root = tmp_path / "scans"
         manifests_dir = tmp_path / "manifests"
@@ -139,10 +140,10 @@ class TestLoadBucket:
             [["img:1", "present.json"], ["img:2", "missing.json"]],
         )
 
-        df = load_bucket(manifest_path, "high-qual", data_root)
+        with caplog.at_level(logging.WARNING, logger="classifier.data_loader"):
+            df = load_bucket(manifest_path, "high-qual", data_root)
         assert len(df) == 1
-        captured = capsys.readouterr()
-        assert "missing.json" in captured.err
+        assert any("missing.json" in r.message for r in caplog.records)
 
     def test_rule_label_matches_classify_metric(self, tmp_path):
         """rule_label column values match classify_metric() output for each row."""
@@ -155,11 +156,12 @@ class TestLoadBucket:
             expected = _extractor.classify_metric(metric)
             assert row["rule_label"] == expected
 
-    def test_missing_manifest_returns_empty(self, tmp_path, capsys):
+    def test_missing_manifest_returns_empty(self, tmp_path, caplog):
         """Missing manifest CSV returns an empty DataFrame without raising."""
-        df = load_bucket(tmp_path / "nonexistent.csv", "high-qual", tmp_path)
+        with caplog.at_level(logging.WARNING, logger="classifier.data_loader"):
+            df = load_bucket(tmp_path / "nonexistent.csv", "high-qual", tmp_path)
         assert df.empty
-        assert "nonexistent.csv" in capsys.readouterr().err
+        assert any("nonexistent.csv" in r.message for r in caplog.records)
 
     def test_row_count_matches_valid_sboms(self, tmp_path):
         """Number of rows in the DataFrame equals the number of valid SBOM files."""

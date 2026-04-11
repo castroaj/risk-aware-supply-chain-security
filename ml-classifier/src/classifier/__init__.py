@@ -13,6 +13,9 @@ Public API:
     build_security_metric_from_sbom — extract a SecurityMetric from a CycloneDX JSON SBOM
 """
 
+import logging
+logging.getLogger("classifier").addHandler(logging.NullHandler())
+
 from .results import TrainingConfig, TrainingResult
 from .trainer import Trainer
 from .predictor import Predictor

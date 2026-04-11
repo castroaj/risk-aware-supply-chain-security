@@ -1,5 +1,6 @@
 from json import load, dumps
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace, ArgumentTypeError
+import logging
 from typing import Dict, Any, Generator, List, Set, Union, Optional
 from urllib.request import urlopen
 from urllib.error import URLError
@@ -7,6 +8,8 @@ from dataclasses import dataclass, fields as _dataclass_fields
 from datetime import datetime
 from pathlib import Path
 from pandas import DataFrame, concat
+
+_log = logging.getLogger(__name__)
 
 # Constants
 JSON_OUTPUT = "json"
@@ -339,25 +342,34 @@ def extract_base_image_days(sbom: Dict[str, Any]) -> float:
 
         # Tier 1 — label fallback chain
         build_date_str = None
+        matched_label = None
         for label in _LABEL_FALLBACK_CHAIN:
+            _log.debug("extract_base_image_days: trying Tier-1 label '%s'", label)
             if label in prop_map and prop_map[label]:
                 build_date_str = prop_map[label]
+                matched_label = label
                 break
 
         if build_date_str:
             build_date = _parse_date_flexible(build_date_str)
             if build_date:
-                return float(max(0, (scan_time - build_date).days))
+                age = float(max(0, (scan_time - build_date).days))
+                _log.info("extract_base_image_days: Tier-1 succeeded label='%s' age_days=%.0f", matched_label, age)
+                return age
 
         # Tier 2 — Docker Hub API fallback
         reference = prop_map.get("aquasecurity:trivy:Reference", "")
+        _log.debug("extract_base_image_days: Tier-1 failed, trying Tier-2 (Docker Hub) reference='%s'", reference)
         if reference:
             hub_date_str = _query_dockerhub_tag_date(reference)
             if hub_date_str:
                 hub_date = _parse_date_flexible(hub_date_str)
                 if hub_date:
-                    return float(max(0, (scan_time - hub_date).days))
+                    age = float(max(0, (scan_time - hub_date).days))
+                    _log.info("extract_base_image_days: Tier-2 (Docker Hub) succeeded age_days=%.0f", age)
+                    return age
 
+        _log.info("extract_base_image_days: all tiers failed — returning 0.0")
         return 0.0
 
     except Exception as e:
@@ -400,7 +412,9 @@ def _parse_date_flexible(date_str: str) -> Optional[datetime]:
 
     for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%Y%m%d"]:
         try:
-            return datetime.strptime(s, fmt)
+            result = datetime.strptime(s, fmt)
+            _log.debug("_parse_date_flexible: matched format='%s' input='%s'", fmt, date_str)
+            return result
         except ValueError:
             continue
     return None
@@ -427,10 +441,12 @@ def _query_dockerhub_tag_date(reference: str) -> Optional[str]:
             image, tag = image_and_tag, "latest"
 
         url = f"https://hub.docker.com/v2/repositories/{namespace}/{image}/tags/{tag}"
+        _log.debug("_query_dockerhub_tag_date: querying %s", url)
         with urlopen(url, timeout=5) as resp:
             data = load(resp)
             return data.get("last_updated")
-    except (URLError, Exception):
+    except (URLError, Exception) as exc:
+        _log.debug("_query_dockerhub_tag_date: request failed url=%s error=%s", url, exc)
         return None
 
 def classify_metric(metric: SecurityMetric) -> str:
@@ -442,11 +458,18 @@ def classify_metric(metric: SecurityMetric) -> str:
     """
     values = metric.__dict__
     for field, threshold in BLOCK_THRESHOLDS.items():
-        if values.get(field, 0.0) >= threshold:
+        val = values.get(field, 0.0)
+        _log.debug("classify_metric: BLOCK check field=%s value=%s threshold=%s", field, val, threshold)
+        if val >= threshold:
+            _log.info("classify_metric: BLOCK — field=%s value=%s threshold=%s scan_file=%s", field, val, threshold, metric.scan_file)
             return "BLOCK"
     for field, threshold in WARN_THRESHOLDS.items():
-        if values.get(field, 0.0) >= threshold:
+        val = values.get(field, 0.0)
+        _log.debug("classify_metric: WARN check field=%s value=%s threshold=%s", field, val, threshold)
+        if val >= threshold:
+            _log.info("classify_metric: WARN — field=%s value=%s threshold=%s scan_file=%s", field, val, threshold, metric.scan_file)
             return "WARN"
+    _log.info("classify_metric: ALLOW — all thresholds passed scan_file=%s", metric.scan_file)
     return "ALLOW"
 
 def build_security_metric_from_sbom(
@@ -457,17 +480,35 @@ def build_security_metric_from_sbom(
     Ingests a Trivy CycloneDX JSON SBOM to create a formalized SecurityMetric vector.
     """
     try:
+        total_dependency_count = extract_total_dependency_count(sbom)
+        _log.debug("build_security_metric: %s total_dependency_count=%s", scan_file, total_dependency_count)
+        vuln_total = extract_vuln_total(sbom)
+        _log.debug("build_security_metric: %s vuln_total=%s", scan_file, vuln_total)
+        critical_cve_count = extract_critical_cve_count(sbom)
+        _log.debug("build_security_metric: %s critical_cve_count=%s", scan_file, critical_cve_count)
+        high_cve_count = extract_high_cve_count(sbom)
+        _log.debug("build_security_metric: %s high_cve_count=%s", scan_file, high_cve_count)
+        cvss_ge_7_count = extract_cvss_ge_7_count(sbom)
+        _log.debug("build_security_metric: %s cvss_ge_7_count=%s", scan_file, cvss_ge_7_count)
+        max_cvss = extract_max_cvss(sbom)
+        _log.debug("build_security_metric: %s max_cvss=%s", scan_file, max_cvss)
+        unique_cwe_count = extract_unique_cwe_count(sbom)
+        _log.debug("build_security_metric: %s unique_cwe_count=%s", scan_file, unique_cwe_count)
+        top25_cwe_count = extract_top25_cwe_count(sbom)
+        _log.debug("build_security_metric: %s top25_cwe_count=%s", scan_file, top25_cwe_count)
+        base_image_age_days = extract_base_image_days(sbom)
+        _log.debug("build_security_metric: %s base_image_age_days=%s", scan_file, base_image_age_days)
         return SecurityMetric(
             scan_file=scan_file,
-            total_dependency_count=extract_total_dependency_count(sbom),
-            vuln_total=extract_vuln_total(sbom),
-            critical_cve_count=extract_critical_cve_count(sbom),
-            high_cve_count=extract_high_cve_count(sbom),
-            cvss_ge_7_count=extract_cvss_ge_7_count(sbom),
-            max_cvss=extract_max_cvss(sbom),
-            unique_cwe_count=extract_unique_cwe_count(sbom),
-            top25_cwe_count=extract_top25_cwe_count(sbom),
-            base_image_age_days=extract_base_image_days(sbom)
+            total_dependency_count=total_dependency_count,
+            vuln_total=vuln_total,
+            critical_cve_count=critical_cve_count,
+            high_cve_count=high_cve_count,
+            cvss_ge_7_count=cvss_ge_7_count,
+            max_cvss=max_cvss,
+            unique_cwe_count=unique_cwe_count,
+            top25_cwe_count=top25_cwe_count,
+            base_image_age_days=base_image_age_days,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to extract features and construct SecurityMetric: {e}")

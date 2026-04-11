@@ -31,6 +31,7 @@ Usage (from the ml-classifier/ directory after pip install -e .):
 """
 
 import json
+import logging
 import sys
 from argparse import (
     ArgumentDefaultsHelpFormatter,
@@ -49,6 +50,51 @@ from classifier.trainer import Trainer, TrainingConfig
 # ---------------------------------------------------------------------------
 # Argument-type validators
 # ---------------------------------------------------------------------------
+
+def _add_logging_args(parser) -> None:
+    """Add --log-level and --log-file arguments to a subparser."""
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="INFO",
+        metavar="LEVEL",
+        help="Logging verbosity (default: INFO). INFO is sufficient for auditing; DEBUG shows per-feature detail.",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="Also write log records to this file (in addition to stdout).",
+    )
+
+
+def _configure_logging(level_str: str, log_file: "Path | None") -> None:
+    """
+    Configure the root 'classifier' logger for CLI use.
+
+    Replaces the NullHandler installed by __init__.py with a StreamHandler
+    writing to stdout at the requested level, plus an optional FileHandler
+    when --log-file is given.
+    """
+    LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    level = getattr(logging, level_str)
+
+    pkg_logger = logging.getLogger("classifier")
+    pkg_logger.setLevel(level)
+    pkg_logger.handlers.clear()
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(level)
+    stdout_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    pkg_logger.addHandler(stdout_handler)
+
+    if log_file is not None:
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setLevel(level)
+        file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+        pkg_logger.addHandler(file_handler)
+
 
 def _existing_dir(value: str) -> Path:
     """Validate that a CLI argument is an existing directory."""
@@ -160,6 +206,7 @@ def parse_args() -> Namespace:
         default=False,
         help="Skip saving the text classification report.",
     )
+    _add_logging_args(train_p)
 
     # --- predict ---
     predict_p = sub.add_parser(
@@ -195,6 +242,7 @@ def parse_args() -> Namespace:
         metavar="FILE",
         help="Write output to this file instead of stdout.",
     )
+    _add_logging_args(predict_p)
 
     return parser.parse_args()
 
@@ -205,6 +253,8 @@ def parse_args() -> Namespace:
 
 def _run_train(args: Namespace) -> None:
     """Execute the train subcommand."""
+    _log = logging.getLogger(__name__)
+
     config = TrainingConfig(
         max_depth=args.max_depth,
         min_samples_split=args.min_samples_split,
@@ -212,10 +262,17 @@ def _run_train(args: Namespace) -> None:
         test_size=args.test_size,
         random_state=args.random_state,
     )
+    _log.info(
+        "train: hyperparameters max_depth=%s min_samples_split=%d min_samples_leaf=%d "
+        "test_size=%.2f random_state=%d",
+        config.max_depth, config.min_samples_split, config.min_samples_leaf,
+        config.test_size, config.random_state,
+    )
 
     print(f"Loading dataset from manifests: {args.manifests_dir}")
     df = load_dataset(args.manifests_dir, args.data_root)
     print(f"Loaded {len(df)} images across {df['bucket'].nunique()} buckets.")
+    _log.info("train: dataset loaded — %d images, %d buckets", len(df), df["bucket"].nunique())
     print(df.groupby(["bucket", "rule_label"]).size().unstack(fill_value=0))
 
     print("\nTraining Decision Tree classifier...")
@@ -226,11 +283,16 @@ def _run_train(args: Namespace) -> None:
     cv_mean = result.cv_scores.mean()
     cv_std = result.cv_scores.std()
     print(f"CV Accuracy   : {cv_mean:.4f} ± {cv_std:.4f} ({len(result.cv_scores)}-fold)")
+    _log.info(
+        "train: test_accuracy=%.4f CV=%.4f±%.4f (%d-fold)",
+        result.test_accuracy, cv_mean, cv_std, len(result.cv_scores),
+    )
     print("\nClassification Report:")
     print(result.class_report_str)
 
     print(f"\nSaving model artifacts to {args.output_dir}/")
     trainer.save_artifacts(result, args.output_dir)
+    _log.info("train: artifacts saved to %s", args.output_dir)
 
     if not args.no_report:
         report_path = result.write_report(args.output_dir)
@@ -247,7 +309,10 @@ def _run_train(args: Namespace) -> None:
 
 def _run_predict(args: Namespace) -> None:
     """Execute the predict subcommand."""
+    _log = logging.getLogger(__name__)
+
     predictor = Predictor(args.artifact_dir)
+    _log.info("predict: loaded artifacts from %s", args.artifact_dir)
 
     sbom_pairs = _extractor.read_path_data(args.sbom)
 
@@ -256,7 +321,7 @@ def _run_predict(args: Namespace) -> None:
         try:
             metric = _extractor.build_security_metric_from_sbom(str(file_path), sbom)
         except Exception as exc:
-            print(f"[WARN] feature extraction failed for {file_path}: {exc}", file=sys.stderr)
+            _log.warning("predict: feature extraction failed for %s: %s", file_path, exc)
             continue
 
         prediction = predictor.predict(metric)
@@ -266,8 +331,13 @@ def _run_predict(args: Namespace) -> None:
         rows.append(row)
 
     if not rows:
-        print("[ERROR] No predictions produced.", file=sys.stderr)
+        _log.error("predict: no predictions produced — all SBOMs failed extraction")
         sys.exit(1)
+
+    _log.info(
+        "predict: processed %d SBOMs — format=%s destination=%s",
+        len(rows), args.output_format, str(args.output) if args.output else "stdout",
+    )
 
     if args.output_format == "json":
         output_text = json.dumps(rows, indent=2)
@@ -293,6 +363,7 @@ def _run_predict(args: Namespace) -> None:
 
 def main() -> None:
     args = parse_args()
+    _configure_logging(args.log_level, args.log_file)
     if args.subcommand == "train":
         _run_train(args)
     elif args.subcommand == "predict":

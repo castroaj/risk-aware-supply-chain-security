@@ -13,6 +13,7 @@ directly.
 """
 
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from typing import List, Optional
 
@@ -20,6 +21,8 @@ import numpy as np
 import joblib
 
 from . import sbom_extractor as _extractor
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -91,11 +94,15 @@ class Predictor:
                 )
 
         try:
+            _log.debug("predictor: loading model from %s", artifact_dir / self._MODEL_FILE)
             self._model = joblib.load(artifact_dir / self._MODEL_FILE)
+            _log.debug("predictor: loading label encoder from %s", artifact_dir / self._ENCODER_FILE)
             self._label_encoder = joblib.load(artifact_dir / self._ENCODER_FILE)
+            _log.debug("predictor: loading feature names from %s", artifact_dir / self._FEATURES_FILE)
             self._feature_names: List[str] = joblib.load(
                 artifact_dir / self._FEATURES_FILE
             )
+            _log.info("predictor: artifacts loaded from %s — features: %s", artifact_dir, self._feature_names)
         except Exception as exc:
             raise RuntimeError(f"Failed to load model artifacts from {artifact_dir}: {exc}") from exc
 
@@ -125,6 +132,7 @@ class Predictor:
         vec = np.array(
             [[getattr(metric, f, 0.0) for f in self._feature_names]], dtype=float
         )
+        _log.debug("predictor: feature vector %s", dict(zip(self._feature_names, vec[0].tolist())))
 
         label_idx = int(self._model.predict(vec)[0])
         label = str(self._label_encoder.inverse_transform([label_idx])[0])
@@ -134,6 +142,11 @@ class Predictor:
             proba = self._model.predict_proba(vec)[0]
             confidence = float(proba[label_idx])
 
+        _log.info(
+            "predictor: scan_file=%s label=%s confidence=%s",
+            metric.scan_file, label,
+            f"{confidence:.4f}" if confidence is not None else "N/A",
+        )
         return PredictionResult(label=label, confidence=confidence)
 
     def predict_from_dict(self, feature_dict: dict) -> PredictionResult:

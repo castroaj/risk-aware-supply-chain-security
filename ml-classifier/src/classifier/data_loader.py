@@ -29,8 +29,10 @@ from .sbom_extractor import build_security_metric_from_sbom, classify_metric, Se
 
 import csv
 import json
-import sys
+import logging
 import pandas as pd
+
+_log = logging.getLogger(__name__)
 
 # Canonical mapping from bucket directory name to its bucket-level label.
 # These labels reflect the intent of the data sourcing strategy, not the
@@ -89,12 +91,18 @@ def find_sbom_json(
         data_root / bucket_name / json_filename,
         data_root / json_filename,
     ]
-    for path in candidates:
-        if path.exists():
-            return path.resolve()
+    if candidates[0].exists():
+        _log.debug("find_sbom_json: tier-1 (bucket subdir) resolved %s", candidates[0].resolve())
+        return candidates[0].resolve()
+    if candidates[1].exists():
+        _log.debug("find_sbom_json: tier-2 (flat data_root) resolved %s", candidates[1].resolve())
+        return candidates[1].resolve()
 
     matches = list(data_root.rglob(json_filename))
-    return matches[0].resolve() if matches else None
+    if matches:
+        _log.debug("find_sbom_json: tier-3 (rglob) resolved %s", matches[0].resolve())
+        return matches[0].resolve()
+    return None
 
 
 def load_bucket(
@@ -136,10 +144,7 @@ def load_bucket(
     records: List[dict] = []
 
     if not manifest_csv.exists():
-        print(
-            f"[WARN] manifest not found: {manifest_csv} — skipping bucket '{bucket_name}'",
-            file=sys.stderr,
-        )
+        _log.warning("load_bucket: manifest not found: %s — skipping bucket '%s'", manifest_csv, bucket_name)
         return _empty_dataframe()
 
     with open(manifest_csv, newline="", encoding="utf-8") as fh:
@@ -151,32 +156,25 @@ def load_bucket(
 
             json_path = find_sbom_json(json_filename, bucket_name, data_root)
             if json_path is None:
-                print(
-                    f"[WARN] SBOM JSON not found for {image_tag} ({json_filename}) — skipping",
-                    file=sys.stderr,
-                )
+                _log.warning("load_bucket: SBOM JSON not found for %s (%s) — skipping", image_tag, json_filename)
                 continue
+            _log.debug("load_bucket: image=%s json_path=%s", image_tag, json_path)
 
             try:
                 with open(json_path, encoding="utf-8") as jf:
                     sbom = json.load(jf)
             except (json.JSONDecodeError, OSError) as exc:
-                print(
-                    f"[WARN] could not parse {json_path}: {exc} — skipping",
-                    file=sys.stderr,
-                )
+                _log.warning("load_bucket: could not parse %s: %s — skipping", json_path, exc)
                 continue
 
             try:
                 metric = build_security_metric_from_sbom(str(json_path), sbom)
             except Exception as exc:
-                print(
-                    f"[WARN] feature extraction failed for {json_path}: {exc} — skipping",
-                    file=sys.stderr,
-                )
+                _log.warning("load_bucket: feature extraction failed for %s: %s — skipping", json_path, exc)
                 continue
 
             rule_label = classify_metric(metric)
+            _log.info("load_bucket: image=%s rule_label=%s", image_tag, rule_label)
 
             records.append(
                 {
@@ -189,6 +187,7 @@ def load_bucket(
                 }
             )
 
+    _log.info("load_bucket: bucket='%s' loaded %d records", bucket_name, len(records))
     return pd.DataFrame(records, columns=REQUIRED_COLUMNS) if records else _empty_dataframe()
 
 

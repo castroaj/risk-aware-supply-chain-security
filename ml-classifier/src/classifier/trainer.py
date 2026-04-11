@@ -13,6 +13,7 @@ location.
 
 from pathlib import Path
 
+import logging
 import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
@@ -20,6 +21,8 @@ from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test
 from sklearn.preprocessing import LabelEncoder
 from sklearn.tree import DecisionTreeClassifier
 import joblib
+
+_log = logging.getLogger(__name__)
 
 from . import sbom_extractor as _extractor
 from .results import TrainingConfig, TrainingResult
@@ -111,8 +114,10 @@ class Trainer:
 
         le = LabelEncoder()
         y = le.fit_transform(y_raw)
+        _log.info("train: LabelEncoder mapping %s", dict(zip(le.classes_, range(len(le.classes_)))))
 
         class_dist = dict(zip(le.classes_, np.bincount(y).tolist()))
+        _log.debug("train: class distribution %s", class_dist)
 
         X_train, X_test, y_train, y_test = train_test_split(
             X,
@@ -121,6 +126,8 @@ class Trainer:
             random_state=config.random_state,
             stratify=y,
         )
+        _log.info("train: stratified split train=%d test=%d", len(X_train), len(X_test))
+        _log.debug("train: feature matrix shape X=%s", X.shape)
 
         clf = DecisionTreeClassifier(
             criterion=config.criterion,
@@ -130,10 +137,19 @@ class Trainer:
             class_weight=config.class_weight,
             random_state=config.random_state,
         )
+        _log.info(
+            "train: DecisionTree criterion=%s max_depth=%s min_samples_split=%d "
+            "min_samples_leaf=%d class_weight=%s",
+            config.criterion, config.max_depth, config.min_samples_split,
+            config.min_samples_leaf, config.class_weight,
+        )
+        _log.info("train: fitting on %d samples", len(X_train))
         clf.fit(X_train, y_train)
+        _log.info("train: fit complete")
 
         y_pred = clf.predict(X_test)
         acc = float(accuracy_score(y_test, y_pred))
+        _log.info("train: test accuracy=%.4f on %d samples", acc, len(X_test))
         report_str = classification_report(y_test, y_pred, target_names=le.classes_)
         cm = confusion_matrix(y_test, y_pred)
 
@@ -141,6 +157,11 @@ class Trainer:
             n_splits=config.cv_folds, shuffle=True, random_state=config.random_state
         )
         cv_scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
+        _log.info(
+            "train: CV accuracy=%.4f ± %.4f (%d-fold)",
+            cv_scores.mean(), cv_scores.std(), len(cv_scores),
+        )
+        _log.debug("train: per-fold CV scores %s", cv_scores.tolist())
 
         return TrainingResult(
             model=clf,
