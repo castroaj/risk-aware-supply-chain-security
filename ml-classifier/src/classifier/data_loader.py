@@ -332,6 +332,70 @@ def load_dataset(
     return combined
 
 
+def load_dataset_from_labels(labels_dir: Path) -> pd.DataFrame:
+    """
+    Load the full training dataset directly from pre-labeled bucket CSVs.
+
+    WHAT:
+        Reads {labels_dir}/{bucket}-labels.csv for each of the three canonical
+        buckets and concatenates the results. This is the primary dataset loading
+        path when the labeling phase (risk-classifier-label) has already been run.
+
+    WHY:
+        Once label CSVs have been written by write_labels_csv(), the training
+        step has no reason to re-parse SBOM JSON files or re-evaluate
+        classify_metric(). The label CSVs are self-contained: they carry all 9
+        features, rule labels, bucket assignments, and scan_file paths. Consuming
+        them directly makes training deterministic and eliminates the Docker Hub
+        API calls that caused label drift across runs.
+
+    WHERE:
+        Reads only the label CSV files; no SBOM JSON files or manifest CSVs
+        are accessed. Raises RuntimeError if no CSV files are found or valid.
+
+    Args:
+        labels_dir: Directory containing {bucket}-labels.csv files written by
+                    risk-classifier-label / write_labels_csv().
+
+    Returns:
+        Concatenated pd.DataFrame with REQUIRED_COLUMNS from all three buckets.
+
+    Raises:
+        RuntimeError: If no valid label CSVs are found in labels_dir.
+        ValueError:   If a label CSV is missing one or more REQUIRED_COLUMNS.
+    """
+    frames: List[pd.DataFrame] = []
+
+    for bucket_name in BUCKET_LABEL_MAP:
+        labels_csv = labels_dir / f"{bucket_name}-labels.csv"
+        if not labels_csv.exists():
+            _log.warning(
+                "load_dataset_from_labels: %s not found — skipping bucket '%s'",
+                labels_csv, bucket_name,
+            )
+            continue
+        df = pd.read_csv(labels_csv)
+        missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Labels CSV '{labels_csv}' is missing required columns: {missing}. "
+                f"Re-run risk-classifier-label to regenerate it."
+            )
+        _log.info(
+            "load_dataset_from_labels: bucket='%s' loaded %d records from %s",
+            bucket_name, len(df), labels_csv,
+        )
+        frames.append(df)
+
+    if not frames:
+        raise RuntimeError(
+            f"No label CSVs found in '{labels_dir}'. "
+            f"Run 'risk-classifier-label' to generate them before training."
+        )
+
+    return pd.concat(frames, ignore_index=True)
+
+
 def metric_from_row(row: pd.Series) -> SecurityMetric:
     """
     Reconstruct a SecurityMetric dataclass from a DataFrame row.

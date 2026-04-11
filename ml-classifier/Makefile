@@ -30,8 +30,6 @@ test:
 train:
 	@echo "Output dir: $(OUTPUT_DIR)"
 	$(VENV)/bin/risk-classifier-train \
-		--manifests-dir $(MANIFESTS) \
-		--data-root $(DATA_ROOT) \
 		--labels-dir $(LABELS_ROOT) \
 		--output-dir $(OUTPUT_DIR)
 

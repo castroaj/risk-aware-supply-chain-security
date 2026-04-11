@@ -66,7 +66,7 @@ from argparse import (
 from pathlib import Path
 
 from classifier import sbom_extractor as _extractor
-from classifier.data_loader import BUCKET_LABEL_MAP, load_bucket, load_dataset, write_labels_csv, write_labels_json
+from classifier.data_loader import BUCKET_LABEL_MAP, load_bucket, load_dataset_from_labels, write_labels_csv, write_labels_json
 from classifier.predictor import Predictor
 from classifier.trainer import Trainer, TrainingConfig
 
@@ -155,23 +155,20 @@ def _parse_train_args() -> Namespace:
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--manifests-dir",
+        "--labels-dir",
         type=_existing_dir,
         required=True,
         metavar="DIR",
-        help="Directory containing high-qual.csv, aged-stale.csv, known-vuln.csv.",
-    )
-    parser.add_argument(
-        "--data-root",
-        type=_existing_dir,
-        required=True,
-        metavar="DIR",
-        help="Root directory containing SBOM JSON files (organised by bucket subdir).",
+        help=(
+            "Directory containing pre-labeled CSVs written by risk-classifier-label "
+            "(high-qual-labels.csv, aged-stale-labels.csv, known-vuln-labels.csv). "
+            "Run 'make label' to generate these before training."
+        ),
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("analysis"),
+        default=Path("training-runs"),
         metavar="DIR",
         help="Directory to write pkl artifacts, PNG plots, and the text report.",
     )
@@ -221,17 +218,6 @@ def _parse_train_args() -> Namespace:
         action="store_true",
         default=False,
         help="Skip saving the text classification report.",
-    )
-    parser.add_argument(
-        "--labels-dir",
-        type=Path,
-        default=None,
-        metavar="DIR",
-        help=(
-            "Directory containing pre-labeled CSVs written by risk-classifier-label "
-            "(e.g. high-qual-labels.csv). If omitted, features are extracted fresh "
-            "from SBOM files on every run."
-        ),
     )
     _add_logging_args(parser)
     return parser.parse_args()
@@ -303,8 +289,8 @@ def _run_train(args: Namespace) -> None:
         config.test_size, config.random_state,
     )
 
-    _log.info("train: loading dataset from manifests: %s", args.manifests_dir)
-    df = load_dataset(args.manifests_dir, args.data_root, labels_dir=args.labels_dir)
+    _log.info("train: loading dataset from labels: %s", args.labels_dir)
+    df = load_dataset_from_labels(args.labels_dir)
     _log.info("train: dataset loaded — %d images, %d buckets", len(df), df["bucket"].nunique())
     _log.info(
         "train: label distribution\n%s",

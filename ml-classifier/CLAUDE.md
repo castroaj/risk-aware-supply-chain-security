@@ -52,21 +52,13 @@ risk-classifier-label \
 
 # --- Training (model developer / data scientist) ---
 
-# Train using default paths — reads pre-labeled CSVs; artifacts written to training-runs/YYYYMMDD-HHMMSS/
+# Train using default paths — artifacts written to training-runs/YYYYMMDD-HHMMSS/
 make train
 
-# Train the Decision Tree, consuming pre-labeled CSVs for reproducibility
+# Train the Decision Tree from pre-labeled CSVs
 risk-classifier-train \
-    --manifests-dir data/image-lists/ \
-    --data-root data/scans/ \
-    --labels-dir data/scans/ \
-    --output-dir analysis/
-
-# Train without pre-labeled CSVs (fresh extraction every run — not recommended for reproducibility)
-risk-classifier-train \
-    --manifests-dir data/image-lists/ \
-    --data-root data/scans/ \
-    --output-dir analysis/
+    --labels-dir data/labels/ \
+    --output-dir training-runs/
 
 # --- Prediction (CI/CD pipeline / security engineer) ---
 

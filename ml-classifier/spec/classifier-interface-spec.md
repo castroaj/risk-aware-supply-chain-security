@@ -63,28 +63,19 @@ Returns `0.0` when both tiers fail or when the tag was republished after scannin
 
 | Argument | Type | Description |
 |---|---|---|
-| `manifests_dir` | `Path` | Directory containing the three manifest CSV files |
-| `data_root` | `Path` | Root directory containing SBOM JSON files (organised by bucket subdirectory) |
+| `labels_dir` | `Path` | Directory containing the three pre-labeled bucket CSVs written by `risk-classifier-label` |
 
-**Manifest CSV format** — one row per image:
-```
-image:tag,output-filename.json
-```
-
-**Expected manifest filenames:**
+**Expected label CSV filenames:**
 
 | File | Bucket name | Bucket-level label |
 |---|---|---|
-| `high-qual.csv` | `high-qual` | ALLOW |
-| `aged-stale.csv` | `aged-stale` | WARN |
-| `known-vuln.csv` | `known-vuln` | BLOCK |
+| `high-qual-labels.csv` | `high-qual` | ALLOW |
+| `aged-stale-labels.csv` | `aged-stale` | WARN |
+| `known-vuln-labels.csv` | `known-vuln` | BLOCK |
 
-**SBOM JSON search order** (for each filename in the manifest):
-1. `data_root/{bucket_name}/{filename}` — canonical layout
-2. `data_root/{filename}` — flat layout
-3. Recursive glob under `data_root` — fallback
+Each CSV must contain `REQUIRED_COLUMNS`: `scan_file, image, bucket, bucket_label, rule_label` + the 9 feature fields. These are the files produced by `risk-classifier-label` / `write_labels_csv()`. Training does not read SBOM JSON files or manifest CSVs — all required information is already present in the label CSVs.
 
-Missing files emit a `WARNING` log record via the `classifier.data_loader` logger and are skipped; they do not abort the load.
+Missing CSVs emit a `WARNING` log record and that bucket is skipped. All three missing raises `RuntimeError`.
 
 #### Hyperparameters (`TrainingConfig` defaults)
 
@@ -196,9 +187,8 @@ risk-classifier-train --manifests-dir DIR --data-root DIR [options]
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--manifests-dir` | Path (required) | — | Directory containing the three manifest CSV files |
-| `--data-root` | Path (required) | — | Root directory with SBOM JSON files |
-| `--output-dir` | Path | `analysis/` | Where to write pkl files, PNGs, and the text report |
+| `--labels-dir` | Path (required) | — | Directory containing the three pre-labeled CSVs written by `risk-classifier-label` |
+| `--output-dir` | Path | `training-runs/` | Where to write pkl files, PNGs, and the text report |
 | `--max-depth` | int | `5` | Maximum Decision Tree depth |
 | `--min-samples-split` | int | `4` | Minimum samples to split a node |
 | `--min-samples-leaf` | int | `2` | Minimum samples at a leaf |
@@ -206,7 +196,7 @@ risk-classifier-train --manifests-dir DIR --data-root DIR [options]
 | `--random-state` | int | `42` | Random seed |
 | `--no-plots` | flag | `False` | Skip saving visualization PNGs |
 | `--no-report` | flag | `False` | Skip saving the text report |
-| `--log-level` | `DEBUG`\|`INFO`\|`WARNING`\|`ERROR` | `INFO` | Logging verbosity; INFO is sufficient for auditing, DEBUG shows per-feature extraction detail |
+| `--log-level` | `DEBUG`\|`INFO`\|`WARNING`\|`ERROR` | `INFO` | Logging verbosity |
 | `--log-file` | Path | (none) | Also write log records to this file in addition to stdout |
 
 ### 5.2 `risk-classifier-predict`
@@ -249,17 +239,15 @@ Log format: `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
 **Minimum viable training:**
 ```bash
 risk-classifier-train \
-    --manifests-dir data/image-lists/ \
-    --data-root data/scans/
+    --labels-dir data/labels/
 ```
 
 **Training with audit log written to file:**
 ```bash
 risk-classifier-train \
-    --manifests-dir data/image-lists/ \
-    --data-root data/scans/ \
-    --output-dir analysis/ \
-    --log-file analysis/train-audit.log
+    --labels-dir data/labels/ \
+    --output-dir training-runs/ \
+    --log-file training-runs/train-audit.log
 ```
 
 **Predict from a single SBOM (JSON output to stdout):**
