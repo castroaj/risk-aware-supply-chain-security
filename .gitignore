@@ -1,6 +1,7 @@
 *.venv
 __pycache__
 *vuln-scan/
+ml-classifier/src/*egg-info
 ml-classifier/data/scans/
 ml-classifier/analysis/runs/*
 
