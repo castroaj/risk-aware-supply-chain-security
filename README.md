@@ -36,13 +36,76 @@
 
 ## ML Classifier
 
-The `ml-classifier/` directory contains the active implementation of the pipeline's risk classification stage.
+The `ml-classifier/` directory contains the active implementation of the pipeline's risk classification stage. See [`ml-classifier/CLAUDE.md`](./ml-classifier/CLAUDE.md) for full setup and usage instructions.
+
+### What it does
 
 - Scans container images with Trivy to produce CycloneDX JSON SBOMs
-- Extracts a 9-feature vector from each SBOM: vulnerability counts, CVSS scores, CWE coverage, and base image age
-- Classifies each image as ALLOW, WARN, or BLOCK using a rule-based threshold classifier
-- Maintains three pre-scanned training buckets corresponding to the three classification labels
-- Decision Tree model training is planned but not yet implemented
+- Extracts a 9-feature vector from each SBOM: vulnerability counts (total, critical, high), CVSS scores, CWE coverage (unique and MITRE Top 25), and base image age
+- Applies a rule-based threshold classifier to assign a preliminary ALLOW / WARN / BLOCK label to each image
+- Trains a Decision Tree classifier on three labelled data buckets (high-quality, aged/stale, known-vulnerable)
+- Issues ALLOW / WARN / BLOCK predictions with confidence scores for new SBOM inputs
+- Emits structured INFO/DEBUG logs to stdout (and optionally a file) so every classification decision is auditable
+
+### Two CLI entry points
+
+The toolkit ships as a single wheel with two purpose-built commands:
+
+| Command | User | Purpose |
+|---|---|---|
+| `risk-classifier-train` | Data scientist / model developer | Train the Decision Tree on SBOM scan datasets; writes pkl artifacts, a classification report, and visualisations |
+| `risk-classifier-predict` | CI/CD pipeline / security engineer | Load saved model artifacts and classify one or more SBOM files; outputs JSON or CSV |
+
+```bash
+# Quick start
+cd ml-classifier
+make install && source .venv/bin/activate
+
+# Train
+risk-classifier-train \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/ \
+    --output-dir analysis/
+
+# Predict
+risk-classifier-predict \
+    --sbom path/to/image.json \
+    --artifact-dir analysis/ \
+    --format json
+```
+
+Both commands accept `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file FILE` for audit logging.
+
+### Current model — v0.0.1
+
+Trained on 143 container images across three label buckets.
+
+| Metric | Value |
+|---|---|
+| Dataset | 143 images (train=114 / test=29) |
+| Test accuracy | 96.55% |
+| CV accuracy | 92.32% ± 5.63% (5-fold stratified) |
+| ALLOW F1 | 1.00 |
+| WARN F1 | 0.95 |
+| BLOCK F1 | 0.96 |
+
+Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.1/`](./ml-classifier/model-results/model-0.0.1/).
+
+### Feature vector (9 features)
+
+All features are extracted from CycloneDX JSON produced by `trivy image --format cyclonedx`.
+
+| Feature | Description |
+|---|---|
+| `total_dependency_count` | Total number of components in the SBOM |
+| `vuln_total` | Total vulnerability count |
+| `critical_cve_count` | Count of critical-severity CVEs |
+| `high_cve_count` | Count of high-severity CVEs |
+| `cvss_ge_7_count` | Count of vulnerabilities with CVSS ≥ 7.0 |
+| `max_cvss` | Highest single CVSS score |
+| `unique_cwe_count` | Number of distinct CWE identifiers |
+| `top25_cwe_count` | Count of vulnerabilities matching a MITRE Top 25 CWE (2025) |
+| `base_image_age_days` | Days since the base image was built (Tier 1: SBOM metadata; Tier 2: Docker Hub API) |
 
 ## Software Prototype
 
