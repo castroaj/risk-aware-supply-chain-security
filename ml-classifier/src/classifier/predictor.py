@@ -87,7 +87,7 @@ class Predictor:
             if not path.exists():
                 raise FileNotFoundError(
                     f"Required artifact not found: {path}. "
-                    f"Run 'python src/classifier/cli.py train ...' to generate artifacts."
+                    f"Run 'risk-classifier train ...' to generate artifacts."
                 )
 
         try:

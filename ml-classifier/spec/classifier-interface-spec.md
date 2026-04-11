@@ -15,7 +15,7 @@ The ML classifier (`src/classifier/`) provides a Decision Tree-based risk classi
 
 | Classifier | Location | Use when |
 |---|---|---|
-| `sbom_extractor.classify_metric(metric)` | `src/sbom_extractor.py` | You need a deterministic, auditable decision with no model dependency |
+| `sbom_extractor.classify_metric(metric)` | `src/classifier/sbom_extractor.py` | You need a deterministic, auditable decision with no model dependency |
 | `classifier.Predictor.predict(metric)` | `src/classifier/predictor.py` | A trained model is available and you want a decision informed by compound feature signals |
 
 Both classifiers consume the same `SecurityMetric` feature vector and produce the same three labels (`ALLOW`, `WARN`, `BLOCK`), but they may disagree on individual images. The rule-based classifier is always the authoritative fallback when no model has been trained.
@@ -26,7 +26,7 @@ Both classifiers consume the same `SecurityMetric` feature vector and produce th
 
 ## 2. Feature Vector Schema
 
-The `SecurityMetric` dataclass (defined in `src/sbom_extractor.py`) is the canonical feature vector. All 9 feature fields are `float`. The `scan_file` field is metadata, not a feature.
+The `SecurityMetric` dataclass (defined in `src/classifier/sbom_extractor.py`) is the canonical feature vector. All 9 feature fields are `float`. The `scan_file` field is metadata, not a feature.
 
 | Field | Type | Units | Valid Range | Source in CycloneDX SBOM |
 |---|---|---|---|---|
@@ -130,12 +130,12 @@ Two accepted input forms:
 
 **Preferred — `SecurityMetric` dataclass:**
 ```python
-from sbom_extractor import build_security_metric_from_sbom, read_path_data
+from classifier import sbom_extractor as _extractor
 from classifier import Predictor
 
 predictor = Predictor(Path("analysis/"))
-for file_path, sbom in read_path_data(Path("image.json")):
-    metric = build_security_metric_from_sbom(str(file_path), sbom)
+for file_path, sbom in _extractor.read_path_data(Path("image.json")):
+    metric = _extractor.build_security_metric_from_sbom(str(file_path), sbom)
     result = predictor.predict(metric)
 ```
 
@@ -182,7 +182,7 @@ When the two classifiers disagree, neither is automatically authoritative. Docum
 ### 5.1 `train` subcommand
 
 ```
-python src/classifier/cli.py train --manifests-dir DIR --data-root DIR [options]
+risk-classifier train --manifests-dir DIR --data-root DIR [options]
 ```
 
 | Flag | Type | Default | Description |
@@ -201,7 +201,7 @@ python src/classifier/cli.py train --manifests-dir DIR --data-root DIR [options]
 ### 5.2 `predict` subcommand
 
 ```
-python src/classifier/cli.py predict --sbom PATH --artifact-dir DIR [options]
+risk-classifier predict --sbom PATH --artifact-dir DIR [options]
 ```
 
 | Flag | Type | Default | Description |
@@ -217,21 +217,21 @@ python src/classifier/cli.py predict --sbom PATH --artifact-dir DIR [options]
 
 **Minimum viable training:**
 ```bash
-python src/classifier/cli.py train \
+risk-classifier train \
     --manifests-dir data/image-lists/ \
     --data-root data/scans/
 ```
 
 **Predict from a single SBOM (JSON output to stdout):**
 ```bash
-python src/classifier/cli.py predict \
+risk-classifier predict \
     --sbom data/scans/high-qual/alpine-3.18.json \
     --artifact-dir analysis/
 ```
 
 **Predict from a directory, write CSV to file:**
 ```bash
-python src/classifier/cli.py predict \
+risk-classifier predict \
     --sbom data/scans/high-qual/ \
     --artifact-dir analysis/ \
     --format csv \

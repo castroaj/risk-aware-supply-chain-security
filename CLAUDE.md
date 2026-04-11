@@ -11,12 +11,12 @@ The goal is a GitHub Actions CI/CD pipeline that runs SBOM generation, vulnerabi
 ## Repository Structure
 
 ```
-ml-classifier/          # Only active code — feature extraction, classification, training data
-  src/sbom_extractor.py # Core feature extraction + rule-based classification CLI
-  scripts/              # Trivy scan scripts
-  data/                 # Image lists (CSV) and pre-scanned SBOM JSON files
-  analysis/             # Statistics script and dataset analysis docs
-  requirements.txt / setup.sh / CLAUDE.md
+ml-classifier/                      # Only active code — feature extraction, classification, training data
+  src/classifier/sbom_extractor.py  # Core feature extraction + rule-based classification CLI
+  scripts/                          # Trivy scan scripts
+  data/                             # Image lists (CSV) and pre-scanned SBOM JSON files
+  analysis/                         # Statistics script and dataset analysis docs
+  pyproject.toml / setup.sh / CLAUDE.md
 research/               # Design research docs (SBOM, SAST, dynamic scanning, ML model)
 documentation/          # SRS, design diagrams, meeting notes
 software-prototype/     # Placeholder (not yet implemented)
@@ -33,10 +33,10 @@ cd ml-classifier
 ./setup.sh && source .venv/bin/activate
 
 # Run feature extractor on a single SBOM file
-python src/sbom_extractor.py -s <path/to/sbom.json>
+python src/classifier/sbom_extractor.py -s <path/to/sbom.json>
 
 # Extract + classify an entire directory, output CSV
-python src/sbom_extractor.py -s data/scans/high-qual/ -f csv -c
+python src/classifier/sbom_extractor.py -s data/scans/high-qual/ -f csv -c
 
 # Scan a Docker image (requires trivy + sudo)
 ./scripts/generate_sbom.sh GENERATE_SBOM <image:tag> <output.json>
@@ -72,7 +72,7 @@ The classifier operates on **structured feature vectors** extracted from tool ou
 - `base_image_age_days` — two-tier: label fallback chain → Docker Hub public API
 - SAST features (`semgrep_total`, `semgrep_high_count`) are deferred from the current scope; see `research/ML_model/semgrep-feature-analysis.md` for rationale
 
-**Classification** is currently rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` constants in `src/sbom_extractor.py`). The Decision Tree model training step has not been implemented yet. Threshold rationale is in `ml-classifier/analysis/dataset-statistics.md`.
+**Classification** is currently rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` constants in `src/classifier/sbom_extractor.py`). The Decision Tree model training step has not been implemented yet. Threshold rationale is in `ml-classifier/analysis/dataset-statistics.md`.
 
 ## Key Design Decisions
 

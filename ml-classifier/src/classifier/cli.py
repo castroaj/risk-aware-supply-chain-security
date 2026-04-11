@@ -8,22 +8,22 @@ Two subcommands:
     train   — Load SBOM scan data, train a Decision Tree, save artifacts and reports.
     predict — Load saved model artifacts, classify one or more SBOM files.
 
-Usage (run from the ml-classifier/ directory):
+Usage (from the ml-classifier/ directory after pip install -e .):
 
     # Train on all three buckets
-    python src/classifier/cli.py train \\
+    risk-classifier train \\
         --manifests-dir data/image-lists/ \\
         --data-root data/scans/ \\
         --output-dir analysis/
 
     # Predict from a single SBOM file
-    python src/classifier/cli.py predict \\
+    risk-classifier predict \\
         --sbom data/scans/high-qual/alpine-3.18.json \\
         --artifact-dir analysis/ \\
         --format json
 
     # Predict from a directory of SBOMs, write CSV to file
-    python src/classifier/cli.py predict \\
+    risk-classifier predict \\
         --sbom data/scans/high-qual/ \\
         --artifact-dir analysis/ \\
         --format csv \\
@@ -39,12 +39,6 @@ from argparse import (
     Namespace,
 )
 from pathlib import Path
-
-# Add src/ to sys.path so that `import classifier` works when this script
-# is run directly (python src/classifier/cli.py) without installation.
-_SRC_DIR = Path(__file__).parent.parent
-if str(_SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(_SRC_DIR))
 
 from classifier import sbom_extractor as _extractor
 from classifier.data_loader import load_dataset
@@ -86,7 +80,7 @@ def parse_args() -> Namespace:
         Parsed Namespace. The 'subcommand' attribute is either 'train' or 'predict'.
     """
     parser = ArgumentParser(
-        prog="python src/classifier/cli.py",
+        prog="risk-classifier",
         description="Risk-Aware Supply Chain Security — ML Classifier",
         formatter_class=ArgumentDefaultsHelpFormatter,
     )

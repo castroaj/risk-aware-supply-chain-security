@@ -5,18 +5,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Environment Setup
 
 ```bash
-# Create virtualenv and install dependencies (uses highest available Python 3.x)
-./setup.sh
+# Create virtualenv and install package in editable mode (uses highest available Python 3.x)
+make install        # runs setup.sh, equivalent to: ./setup.sh
 
 # Activate the virtualenv for subsequent commands
 source .venv/bin/activate
 ```
 
-The virtual environment is Python 3.9 (`.venv/`). Dependencies are in `requirements.txt`: `dataclasses`, `pandas`, `pkgconfig`, `setuptools`, `wheel`, `scikit-learn`, `joblib`, `numpy`, `matplotlib`, `seaborn`, `pytest`.
+The virtual environment is Python 3.9+ (`.venv/`). Dependencies are declared in `pyproject.toml`. Runtime deps: `pandas`, `scikit-learn`, `joblib`, `numpy`, `matplotlib`, `seaborn`. Dev extras (installed by `setup.sh` / `make install`): `pytest`.
 
 ## Running the SBOM Extractor (standalone CLI)
 
-The extractor CLI lives inside the classifier package. The old path (`src/sbom_extractor.py`) is a backward-compatibility shim that forwards to it.
+The extractor CLI lives at `src/classifier/sbom_extractor.py` and can be invoked directly as a script.
 
 ```bash
 # Process a single SBOM file, output JSON to stdout
@@ -36,19 +36,19 @@ python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 
 ```bash
 # Train the Decision Tree on all three data buckets
-python src/classifier/cli.py train \
+risk-classifier train \
     --manifests-dir data/image-lists/ \
     --data-root data/scans/ \
     --output-dir analysis/
 
 # Predict from a single SBOM file (requires trained artifacts in analysis/)
-python src/classifier/cli.py predict \
+risk-classifier predict \
     --sbom data/scans/high-qual/alpine-3.18.json \
     --artifact-dir analysis/ \
     --format json
 
 # Predict from a directory of SBOMs, write CSV to file
-python src/classifier/cli.py predict \
+risk-classifier predict \
     --sbom data/scans/high-qual/ \
     --artifact-dir analysis/ \
     --format csv \
@@ -62,7 +62,7 @@ python src/classifier/cli.py predict \
 python -m pytest tests/ -v
 ```
 
-Tests live in `tests/` and cover `data_loader`, `trainer`, `predictor`, and `reporting`. `tests/conftest.py` adds `src/` to `sys.path` so both the `classifier` package and the `sbom_extractor` shim are importable without installation.
+Tests live in `tests/` and cover `data_loader`, `trainer`, `predictor`, and `reporting`. `tests/conftest.py` adds `src/` to `sys.path` as a fallback for uninstalled environments. After `pip install -e '.[dev]'`, the `classifier` package is importable via site-packages and this manipulation is a no-op.
 
 ## Generating SBOM Scan Data
 
@@ -131,13 +131,14 @@ This is an ML classifier for container image supply chain risk assessment. The p
 - `trainer.py` (`Trainer`) — fits a `DecisionTreeClassifier`, runs stratified K-fold CV, returns a `TrainingResult`
 - `predictor.py` (`Predictor`) — loads saved pkl artifacts and exposes `predict(metric)` / `predict_from_dict(dict)`
 - `results.py` (`TrainingConfig`, `TrainingResult`) — hyperparameter dataclass and training output bundle; also contains all visualization and reporting functions
-- `cli.py` — `train` and `predict` subcommands; run directly with `python src/classifier/cli.py`
+- `cli.py` — `train` and `predict` subcommands; registered as the `risk-classifier` console script via `pyproject.toml`
 
 ## Package Layout
 
 ```
+pyproject.toml               # Build configuration, dependencies, and risk-classifier entrypoint
+Makefile                     # install / test / train / build / clean targets
 src/
-  sbom_extractor.py          # Backward-compat shim — re-exports from classifier/sbom_extractor.py
   classifier/
     __init__.py              # Public API: Trainer, Predictor, TrainingConfig, TrainingResult,
                              #             SecurityMetric, FEATURES, classify_metric,
@@ -149,7 +150,7 @@ src/
     results.py               # TrainingConfig, TrainingResult, visualization and reporting functions
     cli.py                   # Train and predict CLI entry point
 tests/
-  conftest.py                # Adds src/ to sys.path for both package and shim imports
+  conftest.py                # sys.path fallback for uninstalled environments; no-op after editable install
   test_data_loader.py
   test_trainer.py
   test_predictor.py
@@ -158,6 +159,4 @@ tests/
 
 ## Key Import Note
 
-`cli.py` is designed to run both as a direct script and as part of the package. It adds `src/` to `sys.path` at startup and uses absolute imports (`from classifier import ...`) rather than relative ones, so `python src/classifier/cli.py` works without installation.
-
-The shim at `src/sbom_extractor.py` exists solely for backward compatibility with the old CLI path and with any code that does `import sbom_extractor`. New code should import directly from the `classifier` package.
+`cli.py` uses absolute imports (`from classifier import ...`) and is registered as the `risk-classifier` console script via `pyproject.toml`. The package must be installed (`pip install -e .`) before `risk-classifier` is available on PATH.
