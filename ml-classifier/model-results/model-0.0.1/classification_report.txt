@@ -1,0 +1,57 @@
+Risk-Aware Supply Chain Security — Decision Tree Classifier
+============================================================
+
+Dataset size       : 143 images
+Train / Test split : 114 / 29
+Class distribution : ALLOW=35, BLOCK=61, WARN=47
+
+Hyperparameters:
+  criterion         : gini
+  max_depth         : 5
+  min_samples_split : 4
+  min_samples_leaf  : 2
+  class_weight      : balanced
+  random_state      : 42
+  test_size         : 0.20
+  cv_folds          : 5
+
+Test Accuracy      : 0.9655
+CV Accuracy        : 0.9232 ± 0.0563 (5-fold stratified)
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       ALLOW       1.00      1.00      1.00         7
+       BLOCK       1.00      0.92      0.96        12
+        WARN       0.91      1.00      0.95        10
+
+    accuracy                           0.97        29
+   macro avg       0.97      0.97      0.97        29
+weighted avg       0.97      0.97      0.97        29
+
+Decision Tree Rules:
+|--- base_image_age_days <= 382.00
+|   |--- unique_cwe_count <= 41.50
+|   |   |--- class: 0
+|   |--- unique_cwe_count >  41.50
+|   |   |--- class: 2
+|--- base_image_age_days >  382.00
+|   |--- critical_cve_count <= 21.50
+|   |   |--- base_image_age_days <= 2432.50
+|   |   |   |--- top25_cwe_count <= 114.50
+|   |   |   |   |--- class: 2
+|   |   |   |--- top25_cwe_count >  114.50
+|   |   |   |   |--- class: 2
+|   |   |--- base_image_age_days >  2432.50
+|   |   |   |--- class: 1
+|   |--- critical_cve_count >  21.50
+|   |   |--- top25_cwe_count <= 139.00
+|   |   |   |--- base_image_age_days <= 1856.00
+|   |   |   |   |--- class: 2
+|   |   |   |--- base_image_age_days >  1856.00
+|   |   |   |   |--- class: 1
+|   |   |--- top25_cwe_count >  139.00
+|   |   |   |--- unique_cwe_count <= 74.00
+|   |   |   |   |--- class: 1
+|   |   |   |--- unique_cwe_count >  74.00
+|   |   |   |   |--- class: 1

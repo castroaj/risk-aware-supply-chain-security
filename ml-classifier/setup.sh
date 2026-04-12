@@ -18,11 +18,11 @@ source .venv/bin/activate
 echo "Upgrading pip..."
 pip install --upgrade pip
 
-echo "Installing dependencies..."
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt
+echo "Installing package in editable mode with dev extras..."
+if [ -f "pyproject.toml" ]; then
+    pip install -e '.[dev]'
 else
-    echo "Error: requirements.txt not found!"
+    echo "Error: pyproject.toml not found!"
     exit 1
 fi
 

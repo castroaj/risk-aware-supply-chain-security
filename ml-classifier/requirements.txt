@@ -1,5 +1,0 @@
-dataclasses==0.6
-pandas==2.3.3
-pkgconfig==1.6.0
-setuptools 
-wheel
