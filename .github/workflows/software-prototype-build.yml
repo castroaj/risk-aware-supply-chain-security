@@ -1,0 +1,100 @@
+name: Software Prototype Build
+
+on:
+  pull_request:
+    paths:
+      - "software-prototype/**"
+      - ".github/workflows/software-prototype-build.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "software-prototype/**"
+      - ".github/workflows/software-prototype-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: software-prototype-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build + SBOM/Vuln Scan (Python 3.14)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: software-prototype
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install uv
+        run: python -m pip install --upgrade pip uv
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run application smoke test
+        run: uv run software-prototype
+
+      - name: Build package artifacts
+        run: uv build
+
+      - name: Build Docker image for scanning
+        run: docker build -t software-prototype:ci .
+
+      - name: Generate CycloneDX SBOM (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: software-prototype:ci
+          format: cyclonedx
+          output: trivy-sbom.cdx.json
+          scanners: vuln
+
+      - name: Generate JSON vulnerability report (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: software-prototype:ci
+          format: json
+          output: trivy-vuln-report.json
+          scanners: vuln
+          skip-setup-trivy: true
+
+      - name: Enforce vulnerability policy (fail on CRITICAL)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: software-prototype:ci
+          format: table
+          severity: CRITICAL
+          exit-code: 1
+          scanners: vuln
+          skip-setup-trivy: true
+
+      - name: Upload distribution artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-prototype-dist
+          path: software-prototype/dist/*
+          if-no-files-found: error
+
+      - name: Upload security scan artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-prototype-security-reports
+          path: |
+            trivy-sbom.cdx.json
+            trivy-vuln-report.json
+          if-no-files-found: error
+

@@ -117,7 +117,12 @@ All features are extracted from CycloneDX JSON produced by `trivy image --format
 
 ## Software Prototype
 
-TODO
+The `software-prototype/` directory contains the runnable prototype scaffold and
+its initial CI build definition.
+
+- Build workflow definition: `.github/workflows/software-prototype-build.yml`
+- Local build/run entry points: `software-prototype/Makefile`
+- Packaging/runtime metadata: `software-prototype/pyproject.toml`
 
 ## High Level Design
 
