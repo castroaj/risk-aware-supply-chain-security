@@ -97,6 +97,11 @@ jobs:
             --format json \
             --output "${{ github.workspace }}/ml-classification-report.json"
 
+          echo "CLASSIFICATION RESULT"
+          echo "====================="
+          cat ${{ github.workspace }}/ml-classification-report.json
+          echo "====================="
+
           ML_LABEL=$(python -c "
           import json
           data = json.load(open('${{ github.workspace }}/ml-classification-report.json'))
@@ -104,11 +109,6 @@ jobs:
           confidence = data[0].get('ml_confidence', 'N/A')
           print(f'{label}:{confidence}')
           ")
-
-          LABEL="${ML_LABEL%%:*}"
-          CONFIDENCE="${ML_LABEL##*:}"
-
-          echo "ML classification result: label=${LABEL} confidence=${CONFIDENCE}"
 
           if [ "$LABEL" = "BLOCK" ]; then
             echo "::error::ML risk classifier returned BLOCK (confidence=${CONFIDENCE}). Deployment blocked."
@@ -133,6 +133,12 @@ jobs:
           path: |
             trivy-sbom.cdx.json
             trivy-vuln-report.json
-            ml-classification-report.json
           if-no-files-found: error
 
+      - name: Upload ML-Classification Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-prototype-ml-classification
+          path: |
+            ml-classification-report.json
+          if-no-files-found: error
