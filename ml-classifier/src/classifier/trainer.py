@@ -22,7 +22,7 @@ Text report output:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import logging
 import numpy as np
@@ -70,7 +70,7 @@ class TrainingConfig:
     max_depth: int = 5
     min_samples_split: int = 4
     min_samples_leaf: int = 2
-    class_weight: str = "balanced"
+    class_weight: Union[str, dict] = "balanced"
     random_state: int = 42
     test_size: float = 0.20
     cv_folds: int = 5
@@ -589,12 +589,35 @@ class Trainer:
         _log.info("train: stratified split train=%d test=%d", len(X_train), len(X_test))
         _log.debug("train: feature matrix shape X=%s", X.shape)
 
+        # sklearn dict class_weight keys must be encoded integers, not class name strings.
+        # Translate {"ALLOW": 1, "WARN": 2, "BLOCK": 4} → {0: 1, 2: 2, 1: 4} via the LabelEncoder.
+        if isinstance(config.class_weight, dict):
+            known = set(le.classes_)
+            unknown = set(config.class_weight.keys()) - known
+            if unknown:
+                raise ValueError(
+                    f"class_weight contains class names not present in the dataset: "
+                    f"{sorted(unknown)}. Known classes: {sorted(known)}"
+                )
+            bad = {k: v for k, v in config.class_weight.items()
+                   if not isinstance(v, (int, float)) or v <= 0}
+            if bad:
+                raise ValueError(
+                    f"class_weight values must be positive numbers; got: {bad}"
+                )
+            class_weight_encoded = {
+                int(le.transform([cls])[0]): w
+                for cls, w in config.class_weight.items()
+            }
+        else:
+            class_weight_encoded = config.class_weight
+
         clf = DecisionTreeClassifier(
             criterion=config.criterion,
             max_depth=config.max_depth,
             min_samples_split=config.min_samples_split,
             min_samples_leaf=config.min_samples_leaf,
-            class_weight=config.class_weight,
+            class_weight=class_weight_encoded,
             random_state=config.random_state,
         )
         _log.info(

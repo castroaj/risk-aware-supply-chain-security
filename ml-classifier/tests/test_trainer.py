@@ -147,6 +147,42 @@ class TestTrainerTrain:
 
 
 # ---------------------------------------------------------------------------
+# class_weight dict encoding
+# ---------------------------------------------------------------------------
+
+class TestClassWeightEncoding:
+    def test_dict_class_weight_trains_successfully(self):
+        """Trainer accepts a dict class_weight with string class-name keys."""
+        config = TrainingConfig(class_weight={"ALLOW": 1, "WARN": 2, "BLOCK": 4})
+        result = Trainer(_synthetic_df(), config).train()
+        assert 0.0 <= result.test_accuracy <= 1.0
+
+    def test_dict_class_weight_result_has_same_classes(self):
+        """Dict class_weight result contains the same label set as 'balanced'."""
+        r_balanced = Trainer(_synthetic_df(), TrainingConfig(class_weight="balanced")).train()
+        r_dict = Trainer(_synthetic_df(), TrainingConfig(class_weight={"ALLOW": 1, "WARN": 2, "BLOCK": 4})).train()
+        assert set(r_balanced.label_encoder.classes_) == set(r_dict.label_encoder.classes_)
+
+    def test_unknown_class_name_raises(self):
+        """ValueError is raised when dict contains a class name absent from the dataset."""
+        config = TrainingConfig(class_weight={"ALLOW": 1, "WARN": 2, "BOGUS": 4})
+        with pytest.raises(ValueError, match="BOGUS"):
+            Trainer(_synthetic_df(), config).train()
+
+    def test_nonpositive_weight_raises(self):
+        """ValueError is raised when any dict weight is not a positive number."""
+        config = TrainingConfig(class_weight={"ALLOW": 1, "WARN": 2, "BLOCK": -1})
+        with pytest.raises(ValueError, match="positive"):
+            Trainer(_synthetic_df(), config).train()
+
+    def test_zero_weight_raises(self):
+        """ValueError is raised when any dict weight is zero."""
+        config = TrainingConfig(class_weight={"ALLOW": 0, "WARN": 2, "BLOCK": 4})
+        with pytest.raises(ValueError, match="positive"):
+            Trainer(_synthetic_df(), config).train()
+
+
+# ---------------------------------------------------------------------------
 # Trainer.save_artifacts()
 # ---------------------------------------------------------------------------
 
