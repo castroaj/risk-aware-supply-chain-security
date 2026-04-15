@@ -171,5 +171,3 @@ solr:8.0.0,solr-8.0.0.json
 rmohr/activemq:5.14.5,rmohr-activemq-5.14.5.json
 rmohr/activemq:5.15.16,rmohr-activemq-5.15.16.json
 couchdb:1.7.2,couchdb-1.7.2.json
-influxdb:1.7.11,influxdb-1.7.11.json
-vault:1.6.7,vault-1.6.7.json

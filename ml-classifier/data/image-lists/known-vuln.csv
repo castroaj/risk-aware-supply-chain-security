@@ -137,7 +137,6 @@ owasp/benchmark:latest,owasp-benchmark-latest.json
 raesene/bwapp:latest,raesene-bwapp-latest.json
 digininja/dvwa:latest,digininja-dvwa-latest.json
 nowasp/mutillidae:latest,nowasp-mutillidae-latest.json
-bkimminich/juice-shop:v15.0.0,bkimminich-juice-shop-v15.0.0.json
 bkimminich/juice-shop:v7.0.0,bkimminich-juice-shop-v7.0.0.json
 bkimminich/juice-shop:v6.0.0,bkimminich-juice-shop-v6.0.0.json
 bkimminich/juice-shop:v5.0.0,bkimminich-juice-shop-v5.0.0.json
