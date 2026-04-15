@@ -1,0 +1,63 @@
+Risk-Aware Supply Chain Security — Decision Tree Classifier
+============================================================
+
+Dataset size       : 371 images
+Train / Test split : 296 / 75
+Class distribution : ALLOW=96, BLOCK=124, WARN=151
+
+Hyperparameters:
+  criterion         : gini
+  max_depth         : 5
+  min_samples_split : 4
+  min_samples_leaf  : 2
+  class_weight      : balanced
+  random_state      : 42
+  test_size         : 0.20
+  cv_folds          : 5
+
+Test Accuracy      : 0.9600
+CV Accuracy        : 0.9570 ± 0.0229 (5-fold stratified)
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       ALLOW       0.90      0.95      0.92        19
+       BLOCK       1.00      1.00      1.00        25
+        WARN       0.97      0.94      0.95        31
+
+    accuracy                           0.96        75
+   macro avg       0.96      0.96      0.96        75
+weighted avg       0.96      0.96      0.96        75
+
+Decision Tree Rules:
+|--- top25_cwe_count <= 143.00
+|   |--- high_cve_count <= 31.50
+|   |   |--- base_image_age_days <= 368.50
+|   |   |   |--- unique_cwe_count <= 40.00
+|   |   |   |   |--- class: 0
+|   |   |   |--- unique_cwe_count >  40.00
+|   |   |   |   |--- class: 2
+|   |   |--- base_image_age_days >  368.50
+|   |   |   |--- top25_cwe_count <= 0.50
+|   |   |   |   |--- class: 2
+|   |   |   |--- top25_cwe_count >  0.50
+|   |   |   |   |--- class: 2
+|   |--- high_cve_count >  31.50
+|   |   |--- critical_cve_count <= 49.00
+|   |   |   |--- unique_cwe_count <= 39.00
+|   |   |   |   |--- base_image_age_days <= 327.50
+|   |   |   |   |   |--- class: 0
+|   |   |   |   |--- base_image_age_days >  327.50
+|   |   |   |   |   |--- class: 2
+|   |   |   |--- unique_cwe_count >  39.00
+|   |   |   |   |--- base_image_age_days <= 1719.50
+|   |   |   |   |   |--- class: 2
+|   |   |   |   |--- base_image_age_days >  1719.50
+|   |   |   |   |   |--- class: 1
+|   |   |--- critical_cve_count >  49.00
+|   |   |   |--- class: 1
+|--- top25_cwe_count >  143.00
+|   |--- cvss_ge_7_count <= 133.00
+|   |   |--- class: 1
+|   |--- cvss_ge_7_count >  133.00
+|   |   |--- class: 1
