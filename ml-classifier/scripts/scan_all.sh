@@ -4,13 +4,16 @@
 # under <output-dir>/{high-qual,aged-stale,known-vuln}/.
 #
 # Usage:
-#   ./scripts/scan_all.sh [-p] <output-dir>
+#   ./scripts/scan_all.sh [-p] [-s] <output-dir>
 #
 # Options:
-#   -p, --parallel   Run all three bucket scans concurrently (background jobs).
-#                    Each bucket's output is captured in <output-dir>/<bucket>/scan.log.
-#   <output-dir>     Required. Root directory for scan results. The three
-#                    bucket sub-directories are created automatically.
+#   -p, --parallel       Run all three bucket scans concurrently (background jobs).
+#                        Each bucket's output is captured in <output-dir>/<bucket>/scan.log.
+#   -s, --skip-existing  Skip any image whose output JSON already exists in the
+#                        bucket output directory. Useful for scanning only newly
+#                        added images without re-pulling already-scanned ones.
+#   <output-dir>         Required. Root directory for scan results. The three
+#                        bucket sub-directories are created automatically.
 #
 # Prerequisites:
 #   Trivy pulls images from Docker Hub. You must be logged in before running:
@@ -50,11 +53,12 @@ trap cleanup INT TERM
 # usage — print help to stderr and exit 1
 # ---------------------------------------------------------------------------
 usage() {
-    echo "Usage: $0 [-p] <output-dir>" >&2
+    echo "Usage: $0 [-p] [-s] <output-dir>" >&2
     echo "" >&2
-    echo "  -p, --parallel   Run all three bucket scans concurrently." >&2
-    echo "  <output-dir>     Directory to write results into. Sub-directories" >&2
-    echo "                   high-qual/, aged-stale/, and known-vuln/ are created inside." >&2
+    echo "  -p, --parallel       Run all three bucket scans concurrently." >&2
+    echo "  -s, --skip-existing  Skip images whose output JSON already exists." >&2
+    echo "  <output-dir>         Directory to write results into. Sub-directories" >&2
+    echo "                       high-qual/, aged-stale/, and known-vuln/ are created inside." >&2
     exit 1
 }
 
@@ -62,10 +66,12 @@ usage() {
 # Argument parsing
 # ---------------------------------------------------------------------------
 PARALLEL=0
+SKIP_EXISTING=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -p|--parallel) PARALLEL=1; shift ;;
+        -p|--parallel)      PARALLEL=1;       shift ;;
+        -s|--skip-existing) SKIP_EXISTING=1;  shift ;;
         -*) echo "Error: unrecognized flag: $1" >&2; echo "" >&2; usage ;;
         *)  break ;;
     esac
@@ -104,13 +110,16 @@ echo ""
 # Sequential scan (default)
 # ---------------------------------------------------------------------------
 run_sequential() {
+    local skip_flag=()
+    [[ "$SKIP_EXISTING" -eq 1 ]] && skip_flag=("--skip-existing")
+
     for bucket in "${BUCKETS[@]}"; do
         csv="$IMAGE_LISTS_DIR/$bucket.csv"
         out_dir="$OUTPUT_BASE/$bucket"
 
         echo "=== $bucket ==="
         mkdir -p "$out_dir"
-        bash "$GENERATE_SBOM" GENERATE_SBOM_FROM_LIST "$csv" "$out_dir"
+        bash "$GENERATE_SBOM" GENERATE_SBOM_FROM_LIST "${skip_flag[@]+"${skip_flag[@]}"}" "$csv" "$out_dir"
         echo ""
     done
 }
@@ -142,7 +151,9 @@ run_parallel() {
         WATCHER_PIDS+=("$!")   # register with trap
 
         echo "Starting: $bucket"
-        bash "$GENERATE_SBOM" GENERATE_SBOM_FROM_LIST "$csv" "$out_dir" \
+        local skip_flag=()
+        [[ "$SKIP_EXISTING" -eq 1 ]] && skip_flag=("--skip-existing")
+        bash "$GENERATE_SBOM" GENERATE_SBOM_FROM_LIST "${skip_flag[@]+"${skip_flag[@]}"}" "$csv" "$out_dir" \
             >"$out_dir/scan.log" 2>&1 &
         PIDS[$bucket]=$!
         SCAN_PIDS+=("$!")      # register with trap

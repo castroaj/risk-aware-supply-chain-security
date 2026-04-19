@@ -120,6 +120,50 @@ def _configure_logging(level_str: str, log_file: "Path | None") -> None:
         pkg_logger.addHandler(file_handler)
 
 
+_VALID_CLASS_NAMES = {"ALLOW", "WARN", "BLOCK"}
+
+
+def _parse_class_weight(raw: str):
+    """
+    Parse and validate the --class-weight argument.
+
+    Accepts either:
+      - A string shorthand accepted by sklearn (e.g. "balanced")
+      - A JSON object mapping class names to positive weights
+        (e.g. '{"ALLOW":1,"WARN":2,"BLOCK":4}')
+
+    Raises ArgumentTypeError for malformed JSON objects, unknown class
+    names, or non-positive weight values.
+    """
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError):
+        # Not valid JSON — treat as a string shorthand (e.g. "balanced")
+        return raw
+
+    if not isinstance(parsed, dict):
+        raise ArgumentTypeError(
+            f"--class-weight must be a JSON object or a string like 'balanced', "
+            f"got {type(parsed).__name__}"
+        )
+
+    unknown = set(parsed.keys()) - _VALID_CLASS_NAMES
+    if unknown:
+        raise ArgumentTypeError(
+            f"--class-weight contains unknown class names: {sorted(unknown)}. "
+            f"Valid names are: {sorted(_VALID_CLASS_NAMES)}"
+        )
+
+    for cls, w in parsed.items():
+        if not isinstance(w, (int, float)) or w <= 0:
+            raise ArgumentTypeError(
+                f"--class-weight values must be positive numbers; "
+                f"got {cls!r}: {w!r}"
+            )
+
+    return parsed
+
+
 def _existing_dir(value: str) -> Path:
     """Validate that a CLI argument is an existing directory."""
     path = Path(value)
@@ -208,6 +252,17 @@ def _parse_train_args() -> Namespace:
         help="Random seed for reproducibility.",
     )
     parser.add_argument(
+        "--class-weight",
+        type=_parse_class_weight,
+        default="balanced",
+        metavar="SCHEME",
+        help=(
+            'Class weight scheme passed to DecisionTreeClassifier. '
+            'Use "balanced" for inverse-frequency weighting, '
+            'or a JSON dict like \'{"ALLOW":1,"WARN":2,"BLOCK":4}\' for manual weights.'
+        ),
+    )
+    parser.add_argument(
         "--no-plots",
         action="store_true",
         default=False,
@@ -281,12 +336,13 @@ def _run_train(args: Namespace) -> None:
         min_samples_leaf=args.min_samples_leaf,
         test_size=args.test_size,
         random_state=args.random_state,
+        class_weight=args.class_weight,
     )
     _log.info(
         "train: hyperparameters max_depth=%s min_samples_split=%d min_samples_leaf=%d "
-        "test_size=%.2f random_state=%d",
+        "test_size=%.2f random_state=%d class_weight=%s",
         config.max_depth, config.min_samples_split, config.min_samples_leaf,
-        config.test_size, config.random_state,
+        config.test_size, config.random_state, config.class_weight,
     )
 
     _log.info("train: loading dataset from labels: %s", args.labels_dir)

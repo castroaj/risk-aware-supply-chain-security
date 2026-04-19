@@ -82,22 +82,22 @@ risk-classifier-predict \
 
 All three commands accept `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file FILE` for audit logging.
 
-### Current model — v0.1.0
+### Current model — v0.0.2
 
-Trained on 143 container images across three label buckets (ALLOW=35, BLOCK=61, WARN=47).
+Trained on 371 container images across three label buckets (ALLOW=96, BLOCK=124, WARN=151).
 
 | Metric | Value |
 |---|---|
-| Dataset | 143 images (train=114 / test=29) |
-| Test accuracy | 96.55% |
-| CV accuracy | 92.32% ± 5.63% (5-fold stratified) |
-| ALLOW F1 | 1.00 |
+| Dataset | 371 images (train=296 / test=75) |
+| Test accuracy | 96.00% |
+| CV accuracy | 95.70% ± 2.29% (5-fold stratified) |
+| ALLOW F1 | 0.92 |
 | WARN F1 | 0.95 |
-| BLOCK F1 | 0.96 |
+| BLOCK F1 | 1.00 |
 
 Hyperparameters: `max_depth=5`, `min_samples_split=4`, `min_samples_leaf=2`, `class_weight=balanced`, `random_state=42`.
 
-Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.1/`](./ml-classifier/model-results/model-0.0.1/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
+Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.2/`](./ml-classifier/model-results/model-0.0.2/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
 
 ### Feature vector (9 features)
 

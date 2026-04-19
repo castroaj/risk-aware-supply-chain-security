@@ -97,7 +97,7 @@ All 143 images are currently used in both training and cross-validation, giving 
 ### P2 — Model Quality
 
 **8. Bias the cost matrix toward BLOCK false negatives**
-`class_weight="balanced"` weights classes inversely proportional to frequency. For a security gate, BLOCK misses are significantly more costly than WARN false positives. Consider `class_weight={"ALLOW": 1, "WARN": 2, "BLOCK": 4}` to improve BLOCK recall at an acceptable precision cost.
+`class_weight="balanced"` weights classes inversely proportional to frequency. For a security gate, BLOCK misses are significantly more costly than WARN false positives. Consider `class_weight={"ALLOW": 1, "WARN": 2, "BLOCK": 4}` to improve BLOCK recall at an acceptable precision cost. This was experimentally evaluated on 2026-04-12 — see `spec/class-weight-tuning-spec.md` for full results and conditions under which re-evaluation is warranted.
 
 **9. Address correlated features**
 `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, and `vuln_total` all measure overlapping aspects of vulnerability severity. High pairwise correlation between these features makes split selection noisy — any one can serve as the root split under slightly different data, as demonstrated by the run 2 pivot from `base_image_age_days` to `cvss_ge_7_count`. Consider computing a single composite severity score or removing `cvss_ge_7_count`, which is effectively captured by the combination of critical and high counts.
