@@ -221,9 +221,15 @@ class TestMetricFromRow:
         row = df.iloc[0]
         metric = metric_from_row(row)
 
+        import math
         assert isinstance(metric, _extractor.SecurityMetric)
         for feat in _extractor.FEATURES:
-            assert getattr(metric, feat) == float(row[feat])
+            actual   = getattr(metric, feat)
+            expected = float(row[feat])
+            # NaN != NaN by IEEE 754; treat both-NaN as equal (indicates failed lookup)
+            if math.isnan(actual) and math.isnan(expected):
+                continue
+            assert actual == expected
 
     def test_scan_file_set(self, tmp_path):
         """metric_from_row populates scan_file from the row."""
