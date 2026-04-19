@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - "software-prototype/**"
+      - "ml-classifier/**"
       - ".github/workflows/software-prototype-build.yml"
   push:
     branches:
       - main
     paths:
       - "software-prototype/**"
+      - "ml-classifier/**"
       - ".github/workflows/software-prototype-build.yml"
   workflow_dispatch:
 
@@ -82,6 +84,41 @@ jobs:
           scanners: vuln
           skip-setup-trivy: true
 
+      - name: Install ML risk classifier
+        working-directory: ${{ github.workspace }}/ml-classifier
+        run: make install
+
+      - name: Classify SBOM with ML risk model
+        working-directory: ${{ github.workspace }}
+        run: |
+          ml-classifier/.venv/bin/risk-classifier-predict \
+            --sbom "${{ github.workspace }}/trivy-sbom.cdx.json" \
+            --artifact-dir "${{ github.workspace }}/ml-classifier/model-results/model-0.0.1/" \
+            --format json \
+            --output "${{ github.workspace }}/ml-classification-report.json"
+
+          echo "CLASSIFICATION RESULT"
+          echo "====================="
+          cat ${{ github.workspace }}/ml-classification-report.json
+          echo "====================="
+
+          ML_LABEL=$(python -c "
+          import json
+          data = json.load(open('${{ github.workspace }}/ml-classification-report.json'))
+          label = data[0]['ml_label']
+          confidence = data[0].get('ml_confidence', 'N/A')
+          print(f'{label}:{confidence}')
+          ")
+
+          if [ "$LABEL" = "BLOCK" ]; then
+            echo "::error::ML risk classifier returned BLOCK (confidence=${CONFIDENCE}). Deployment blocked."
+            exit 1
+          elif [ "$LABEL" = "WARN" ]; then
+            echo "::warning::ML risk classifier returned WARN (confidence=${CONFIDENCE}). Review recommended before deployment."
+          else
+            echo "ML risk classifier returned ALLOW (confidence=${CONFIDENCE}). Proceeding."
+          fi
+
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -98,3 +135,10 @@ jobs:
             trivy-vuln-report.json
           if-no-files-found: error
 
+      - name: Upload ML-Classification Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-prototype-ml-classification
+          path: |
+            ml-classification-report.json
+          if-no-files-found: error
