@@ -1,11 +1,8 @@
 from json import load, dumps
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace, ArgumentTypeError
 import logging
-from typing import Dict, Any, Generator, List, Set, Union, Optional, Tuple
-from urllib.request import urlopen, Request, build_opener, HTTPRedirectHandler
-from urllib.error import HTTPError
+from typing import Dict, Any, Generator, List, Set, Union
 from dataclasses import dataclass, fields as _dataclass_fields
-from datetime import datetime
 from pathlib import Path
 from pandas import DataFrame, concat
 
@@ -41,7 +38,6 @@ SEVERITY_WEIGHT:Dict[str, int] = {
 BLOCK_THRESHOLDS: Dict[str, float] = {
     "critical_cve_count":  50.0,
     "top25_cwe_count":     150.0,
-    "base_image_age_days": 2000.0,
 }
 
 WARN_THRESHOLDS: Dict[str, float] = {
@@ -49,18 +45,7 @@ WARN_THRESHOLDS: Dict[str, float] = {
     "cvss_ge_7_count":     100.0,
     "unique_cwe_count":    40.0,
     "top25_cwe_count":     50.0,
-    "base_image_age_days": 365.0,
 }
-
-# Accept header for OCI/Docker manifest requests. List/index types come first so the
-# registry serves a manifest list when the digest points to one — ordering single-arch
-# formats first causes a 400 response for manifest-list digests.
-_MANIFEST_ACCEPT = (
-    "application/vnd.docker.distribution.manifest.list.v2+json, "
-    "application/vnd.oci.image.index.v1+json, "
-    "application/vnd.docker.distribution.manifest.v2+json, "
-    "application/vnd.oci.image.manifest.v1+json"
-)
 
 @dataclass
 class SecurityMetric:
@@ -79,7 +64,6 @@ class SecurityMetric:
     max_cvss: float
     unique_cwe_count: float
     top25_cwe_count: float
-    base_image_age_days: float
 
     def to_json(self) -> str:
         return dumps(self.__dict__)
@@ -89,8 +73,7 @@ class SecurityMetric:
             f"{self.scan_file},{self.total_dependency_count},{self.vuln_total},"
             f"{self.critical_cve_count},{self.high_cve_count},"
             f"{self.cvss_ge_7_count},{self.max_cvss},"
-            f"{self.unique_cwe_count},{self.top25_cwe_count},"
-            f"{self.base_image_age_days}"
+            f"{self.unique_cwe_count},{self.top25_cwe_count}"
         )
 
     @staticmethod
@@ -98,7 +81,7 @@ class SecurityMetric:
         return (
             "scan_file,total_dependency_count,vuln_total,critical_cve_count,"
             "high_cve_count,cvss_ge_7_count,max_cvss,unique_cwe_count,"
-            "top25_cwe_count,base_image_age_days"
+            "top25_cwe_count"
         )
 
 # Ordered list of feature names derived from SecurityMetric field definitions.
@@ -315,58 +298,6 @@ def extract_top25_cwe_count(sbom: Dict[str, Any]) -> float:
     except Exception as e:
         raise RuntimeError(f"Failed to extract top25_cwe_count: {e}")
 
-def extract_base_image_days(sbom: Dict[str, Any]) -> float:
-    """
-    **WHAT:**
-    - `base_image_age_days` is the number of days between the scan timestamp and the
-      oldest layer creation date in the image's OCI history. The oldest entry in
-      history corresponds to the foundational base image (e.g. debian:bookworm-slim,
-      alpine:3.x), so this captures how stale the deepest dependency is — not just
-      when the application image was built.
-
-    **WHY:**
-    - A freshly built application image can still carry 18-month-old system libraries
-      if the base image was never updated. This metric surfaces that staleness.
-    - It remains informative in CI/CD pipelines: even a brand-new build inherits the
-      base image layer timestamps, so the feature is non-zero when the base is old.
-
-    **WHERE:**
-    - OCI registry config blob via Docker Hub anonymous auth, using `aquasecurity:trivy:RepoDigest`
-      to pin the lookup to the exact artifact that was scanned (not whatever tag points
-      to today). Falls back to tag-based lookup when no digest is present.
-
-    **RETURN VALUES:**
-    - `float` ≥ 0 on success (0.0 means the oldest base layer was created on the scan date)
-    - `float("nan")` when the lookup fails (registry unreachable, non-DockerHub image,
-      image not yet pushed). `nan` is intentionally distinct from `0.0` so callers can
-      differentiate a genuine brand-new base layer from an unknown age.
-    """
-    try:
-        properties = sbom.get("metadata", {}).get("component", {}).get("properties", [])
-        prop_map: Dict[str, str] = {p.get("name", ""): p.get("value", "") for p in properties}
-
-        scan_timestamp_str = sbom.get("metadata", {}).get("timestamp")
-        scan_time: datetime = (
-            datetime.strptime(scan_timestamp_str[:19], "%Y-%m-%dT%H:%M:%S")
-            if scan_timestamp_str
-            else datetime.now()
-        )
-
-        reference  = prop_map.get("aquasecurity:trivy:Reference",  "")
-        repo_digest = prop_map.get("aquasecurity:trivy:RepoDigest", "")
-
-        oldest_date = _resolve_oldest_base_layer_date(reference, repo_digest)
-        if oldest_date is None:
-            _log.info("extract_base_image_days: OCI lookup failed — returning nan (reference='%s')", reference)
-            return float("nan")
-
-        age = float(max(0, (scan_time - oldest_date).days))
-        _log.info("extract_base_image_days: age_days=%.0f (reference='%s')", age, reference)
-        return age
-
-    except Exception as e:
-        raise RuntimeError(f"Failed to extract base_image_age_days: {e}")
-
 def _get_highest_severity(ratings: List[Dict[str, Any]]) -> int:
     """
     Helper function to find the highest severity weight from a list of ratings.
@@ -392,215 +323,6 @@ def _get_highest_score(ratings: List[Dict[str, Any]]) -> float:
         except (ValueError, TypeError):
             continue
     return max_score
-
-def _parse_date_flexible(date_str: str) -> Optional[datetime]:
-    """Parse a date string in any of the formats observed in the scan corpus."""
-    # Normalise: strip whitespace and surrounding quote chars (some label values are
-    # double-quoted JSON strings, e.g. '"2018-11-10T15:46:38Z"'), then strip trailing Z
-    s = date_str.strip().strip('"\'')
-    if s.endswith("Z"):
-        s = s[:-1]
-    # Drop sub-second precision and timezone offset
-    s = s.split(".")[0].split("+")[0]
-
-    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%Y%m%d"]:
-        try:
-            result = datetime.strptime(s, fmt)
-            _log.debug("_parse_date_flexible: matched format='%s' input='%s'", fmt, date_str)
-            return result
-        except ValueError:
-            continue
-    return None
-
-def _parse_dockerhub_ref(repo_digest: str, reference: str) -> Tuple[str, str, str]:
-    """
-    Resolve (namespace, image, digest_or_tag) for a Docker Hub image.
-
-    Prefers `repo_digest` (e.g. "alpine@sha256:abc...") because it is pinned to
-    the exact artifact that was scanned. Falls back to `reference` (e.g.
-    "alpine:latest") when no digest is available.
-
-    Returns ("", "", "") when neither source can be parsed.
-    """
-    def _strip_registry(parts: List[str]) -> List[str]:
-        """Drop a leading registry host component (contains '.' or port ':')."""
-        if len(parts) >= 2 and ("." in parts[0] or ":" in parts[0]):
-            return parts[1:]
-        return parts
-
-    # --- RepoDigest path ---
-    if repo_digest and "@" in repo_digest:
-        parts = _strip_registry(repo_digest.split("/"))
-        namespace = "library" if len(parts) == 1 else parts[0]
-        img_digest = parts[0] if len(parts) == 1 else "/".join(parts[1:])
-        if "@" in img_digest:
-            image, digest_ref = img_digest.split("@", 1)
-            return namespace, image, digest_ref
-
-    # --- reference / tag fallback ---
-    if not reference:
-        return "", "", ""
-    parts = _strip_registry(reference.split("/"))
-    namespace = "library" if len(parts) == 1 else parts[0]
-    image_and_tag = parts[0] if len(parts) == 1 else "/".join(parts[1:])
-    if ":" in image_and_tag:
-        image, tag = image_and_tag.rsplit(":", 1)
-    else:
-        image, tag = image_and_tag, "latest"
-    return namespace, image, tag
-
-
-def _fetch_dockerhub_token(namespace: str, image: str) -> Optional[str]:
-    """Obtain an anonymous Docker Hub pull token for the given repository."""
-    url = f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{namespace}/{image}:pull"
-    _log.debug("_fetch_dockerhub_token: %s/%s", namespace, image)
-    with urlopen(url, timeout=5) as resp:
-        data = load(resp)
-    return data.get("token") or data.get("access_token")
-
-
-def _fetch_manifest(
-    namespace: str, image: str, digest_ref: str, token: str
-) -> Optional[Dict[str, Any]]:
-    """
-    Fetch an OCI/Docker manifest by digest or tag.
-
-    When the registry returns a manifest list or OCI image index (multi-arch image),
-    resolve and return the linux/amd64 child manifest so callers always receive a
-    single-platform manifest with a `config` field.
-    """
-    url = f"https://registry-1.docker.io/v2/{namespace}/{image}/manifests/{digest_ref}"
-    _log.debug("_fetch_manifest: %s", url)
-    req = Request(url, headers={"Authorization": f"Bearer {token}", "Accept": _MANIFEST_ACCEPT})
-    with urlopen(req, timeout=5) as resp:
-        manifest = load(resp)
-
-    media_type = manifest.get("mediaType", "")
-    if not ("list" in media_type or "index" in media_type or manifest.get("manifests")):
-        return manifest
-
-    # Multi-arch: pick linux/amd64, fall back to first entry
-    child_digest = next(
-        (
-            m["digest"] for m in manifest.get("manifests", [])
-            if m.get("platform", {}).get("os") == "linux"
-            and m.get("platform", {}).get("architecture") == "amd64"
-        ),
-        None,
-    )
-    if child_digest is None and manifest.get("manifests"):
-        child_digest = manifest["manifests"][0]["digest"]
-    if not child_digest:
-        return None
-
-    child_url = f"https://registry-1.docker.io/v2/{namespace}/{image}/manifests/{child_digest}"
-    child_req = Request(
-        child_url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": (
-                "application/vnd.docker.distribution.manifest.v2+json, "
-                "application/vnd.oci.image.manifest.v1+json"
-            ),
-        },
-    )
-    with urlopen(child_req, timeout=5) as resp:
-        return load(resp)
-
-
-def _fetch_config_blob(
-    namespace: str, image: str, manifest: Dict[str, Any], token: str
-) -> Optional[Dict[str, Any]]:
-    """
-    Fetch the OCI image config blob from the Docker Hub registry.
-
-    Docker Hub blob endpoints redirect to a Cloudflare R2 CDN URL. The CDN expects
-    no Authorization header (the presigned URL carries its own credentials), so we
-    intercept the 302 redirect and re-fetch the Location URL without auth.
-    """
-    config_digest = manifest.get("config", {}).get("digest")
-    if not config_digest:
-        return None
-
-    blob_url = f"https://registry-1.docker.io/v2/{namespace}/{image}/blobs/{config_digest}"
-    blob_req = Request(blob_url, headers={"Authorization": f"Bearer {token}"})
-
-    class _StopRedirect(HTTPRedirectHandler):
-        def redirect_request(self, *args, **kwargs):  # type: ignore[override]
-            return None
-
-    no_redir = build_opener(_StopRedirect)
-    try:
-        with no_redir.open(blob_req, timeout=5) as resp:
-            return load(resp)
-    except HTTPError as err:
-        location = err.headers.get("Location")
-        if not location:
-            return None
-        with urlopen(location, timeout=5) as resp:
-            return load(resp)
-
-
-def _oldest_history_date(config_data: Dict[str, Any]) -> Optional[datetime]:
-    """
-    Return the oldest non-null `created` timestamp from the OCI image config history.
-
-    Each entry in `history` corresponds to one image layer, ordered from the deepest
-    ancestor to the application. The minimum timestamp is therefore the age of the
-    foundational base image (e.g. debian:bookworm-slim, alpine:3.x).
-
-    Falls back to the top-level `config.created` field when history is absent or
-    all entries lack timestamps (e.g. scratch / distroless images).
-    """
-    history = config_data.get("history", [])
-    candidates = [entry.get("created") for entry in history if entry.get("created")]
-    if not candidates:
-        top = config_data.get("created")
-        if top:
-            candidates = [top]
-
-    parsed = [_parse_date_flexible(ts) for ts in candidates]
-    valid  = [dt for dt in parsed if dt is not None]
-    return min(valid) if valid else None
-
-
-def _resolve_oldest_base_layer_date(reference: str, repo_digest: str) -> Optional[datetime]:
-    """
-    Return the oldest base layer creation date for a Docker Hub public image.
-
-    Performs three sequential OCI registry calls (token → manifest → config blob)
-    using anonymous auth. Returns None when the image cannot be resolved (non-Docker
-    Hub registry, network failure, image not yet pushed).
-    """
-    try:
-        # Reject non-DockerHub registries up front
-        ref_parts = reference.split("/")
-        if len(ref_parts) >= 2 and ("." in ref_parts[0] or ":" in ref_parts[0]):
-            _log.debug("_resolve_oldest_base_layer_date: non-DockerHub registry '%s'", ref_parts[0])
-            return None
-
-        namespace, image, digest_ref = _parse_dockerhub_ref(repo_digest, reference)
-        if not (namespace and image and digest_ref):
-            return None
-
-        token = _fetch_dockerhub_token(namespace, image)
-        if not token:
-            return None
-
-        manifest = _fetch_manifest(namespace, image, digest_ref, token)
-        if manifest is None:
-            return None
-
-        config_data = _fetch_config_blob(namespace, image, manifest, token)
-        if config_data is None:
-            return None
-
-        return _oldest_history_date(config_data)
-
-    except Exception as exc:
-        _log.debug("_resolve_oldest_base_layer_date: failed reference='%s' error=%s", reference, exc)
-        return None
-
 
 def classify_metric(metric: SecurityMetric) -> str:
     """
@@ -649,8 +371,6 @@ def build_security_metric_from_sbom(
         _log.debug("build_security_metric: %s unique_cwe_count=%s", scan_file, unique_cwe_count)
         top25_cwe_count = extract_top25_cwe_count(sbom)
         _log.debug("build_security_metric: %s top25_cwe_count=%s", scan_file, top25_cwe_count)
-        base_image_age_days = extract_base_image_days(sbom)
-        _log.debug("build_security_metric: %s base_image_age_days=%s", scan_file, base_image_age_days)
         return SecurityMetric(
             scan_file=scan_file,
             total_dependency_count=total_dependency_count,
@@ -661,7 +381,6 @@ def build_security_metric_from_sbom(
             max_cvss=max_cvss,
             unique_cwe_count=unique_cwe_count,
             top25_cwe_count=top25_cwe_count,
-            base_image_age_days=base_image_age_days,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to extract features and construct SecurityMetric: {e}")

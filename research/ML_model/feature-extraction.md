@@ -16,8 +16,6 @@
   - [SAST Scan Features](#sast-scan-features)
     - [SemGrep Total](#semgrep-total)
     - [SemGrep High Count](#semgrep-high-count)
-  - [Build Metadata](#build-metadata)
-    - [Base Image Age Days](#base-image-age-days)
 
 
 # I. Feature Definition
@@ -37,8 +35,6 @@ The following are the features relevant for the classification model
 - SAST Scan (Semgrep)
   - `semgrep_total`
   - `semgrep_high_count`
-- Build Metadata (container)
-  - `base_image_age_days`
 
 # II. Feature Extraction
 
@@ -197,19 +193,3 @@ The following features are derived from the `results` section of the SemGrep out
 - The `semgrep_high_count` is derived by examining the `severity` field (typically `.extra.severity`) of each entry in the `.results` array.
 - If the value matches `ERROR` (Semgrep's high severity label), this count is incremented.
 
-## Build Metadata
-
-The following features are derived from build metadata captured during the pipeline's build process
-
-### Base Image Age Days
-
-**WHAT:**
-- The `base_image_age_days` represents the number of days that have elapsed since the container base image was created.
-- It acts as a temporal metric indicating the freshness of the underlying operating system and system-level dependencies.
-
-**WHY:**
-- Older base images are significantly more likely to contain unpatched vulnerabilities and security regressions.
-- A high age indicates that the project is not regularly ingesting upstream security patches and updates.
-
-**WHERE:**
-- The `base_image_age_days` is derived by extracting the creation timestamp (typically the `Created` field) from the container image metadata or configuration.
