@@ -306,7 +306,6 @@ The system shall extract the following features (initial set):
 - top25_cwe_count
 - semgrep_total (optional)
 - semgrep_high_count (optional)
-- base_image_age_days
 
 Notes:
 - Semgrep-derived features are marked optional. See `research/semgrep/semgrep_feature_analysis.md` (or `semgrep_feature_analysis.md`) for the project's semgrep feature analysis and rationale for excluding semgrep features from the default feature vector in early experiments. Semgrep features may be enabled as an opt-in augmentation if desired.
