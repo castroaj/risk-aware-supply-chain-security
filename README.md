@@ -41,7 +41,7 @@ The `ml-classifier/` directory contains the active implementation of the pipelin
 ### What it does
 
 - Scans container images with Trivy to produce CycloneDX JSON SBOMs
-- Extracts a 9-feature vector from each SBOM: vulnerability counts (total, critical, high), CVSS scores, CWE coverage (unique and MITRE Top 25), and base image age
+- Extracts an 8-feature vector from each SBOM: vulnerability counts (total, critical, high), CVSS scores, and CWE coverage (unique and MITRE Top 25)
 - Applies a rule-based threshold classifier to assign a preliminary ALLOW / WARN / BLOCK label to each image
 - Trains a Decision Tree classifier on three labelled data buckets (high-quality, aged/stale, known-vulnerable)
 - Issues ALLOW / WARN / BLOCK predictions with confidence scores for new SBOM inputs
@@ -99,7 +99,7 @@ Hyperparameters: `max_depth=5`, `min_samples_split=4`, `min_samples_leaf=2`, `cl
 
 Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.2/`](./ml-classifier/model-results/model-0.0.2/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
 
-### Feature vector (9 features)
+### Feature vector (8 features)
 
 All features are extracted from CycloneDX JSON produced by `trivy image --format cyclonedx`.
 
@@ -113,7 +113,6 @@ All features are extracted from CycloneDX JSON produced by `trivy image --format
 | `max_cvss` | Highest single CVSS score |
 | `unique_cwe_count` | Number of distinct CWE identifiers |
 | `top25_cwe_count` | Count of vulnerabilities matching a MITRE Top 25 CWE (2025) |
-| `base_image_age_days` | Days since the base image was built (Tier 1: SBOM metadata; Tier 2: Docker Hub API) |
 
 ## Software Prototype
 

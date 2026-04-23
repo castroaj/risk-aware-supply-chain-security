@@ -135,9 +135,8 @@ This is an ML classifier for container image supply chain risk assessment. The p
 
 **Stage 2 — Feature Extraction** (`src/classifier/sbom_extractor.py`)
 - Parses CycloneDX JSON SBOMs and extracts a fixed-length `SecurityMetric` feature vector
-- Features (9): `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`, `base_image_age_days`
+- Features (8): `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`
 - SAST/Semgrep features (`semgrep_total`, `semgrep_high_count`) were removed from current scope; rationale is in `research/ML_model/semgrep-feature-analysis.md`
-- `base_image_age_days` uses a two-tier strategy: (1) label fallback chain in `.metadata.component.properties`; (2) Docker Hub public API via `aquasecurity:trivy:Reference` (5s timeout, falls back to `0.0`)
 - Severity ratings use the highest rating across all sources per vulnerability (not NVD-only)
 - Top 25 CWEs reference the MITRE 2025 list hardcoded in `TOP_25_CWES`
 - `FEATURES` list is the single source of truth for feature ordering across training and prediction
@@ -151,7 +150,7 @@ This is an ML classifier for container image supply chain risk assessment. The p
 - `write_labels_csv(df, path)` — persists a labeled bucket DataFrame to CSV so rule labels are frozen at scan time
 - `risk-classifier-label` CLI command writes `{bucket}-labels.csv` per bucket to a configurable output directory
 - Training (`load_bucket`) consumes these CSVs via `--labels-dir` to skip live feature extraction and `classify_metric()` on every run
-- Label drift (caused by threshold changes or Docker Hub API non-determinism on `base_image_age_days`) becomes a visible `git diff` on the label CSV rather than a silent accuracy drop
+- Label drift (caused by threshold changes) becomes a visible `git diff` on the label CSV rather than a silent accuracy drop
 
 **Stage 4 — ML Training and Prediction** (`src/classifier/`)
 - `data_loader.py` — reads bucket manifests, optionally reads pre-labeled CSVs, calls the extractor for each SBOM, builds a labeled DataFrame

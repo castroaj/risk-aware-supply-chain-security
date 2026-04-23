@@ -11,15 +11,17 @@ The goal is a GitHub Actions CI/CD pipeline that runs SBOM generation, vulnerabi
 ## Repository Structure
 
 ```
-ml-classifier/                      # Only active code — feature extraction, classification, training data
+ml-classifier/                      # ML pipeline — feature extraction, classification, training
   src/classifier/sbom_extractor.py  # Core feature extraction + rule-based classification CLI
   scripts/                          # Trivy scan scripts
-  data/                             # Image lists (CSV) and pre-scanned SBOM JSON files
-  analysis/                         # Statistics script and dataset analysis docs
+  data/                             # Image lists (CSV), pre-scanned SBOM JSON files, label CSVs
+  analysis/                         # Dataset analysis docs and training run comparisons
   pyproject.toml / Makefile / setup.sh / CLAUDE.md
+software-prototype/                 # CI/CD pipeline prototype — GitHub Actions workflow, Docker, uv
+  app/                              # Python package (main entry point)
+  Dockerfile / Makefile / pyproject.toml / uv.lock
 research/               # Design research docs (SBOM, SAST, dynamic scanning, ML model)
 documentation/          # SRS, design diagrams, meeting notes
-software-prototype/     # Placeholder (not yet implemented)
 ```
 
 ## Active Code: `ml-classifier/`
@@ -51,14 +53,15 @@ python src/classifier/sbom_extractor.py -s data/scans/high-qual/ -f csv -c
 ./scripts/scan_all.sh data/scans/
 ./scripts/scan_all.sh -p data/scans/
 
-# Print dataset statistics across all three training buckets
-python analysis/compute_statistics.py
-
-# Train the Decision Tree (model developer workflow)
-risk-classifier-train \
+# Label — extract features and assign rule labels; write per-bucket CSVs to data/labels/
+risk-classifier-label \
     --manifests-dir data/image-lists/ \
-    --data-root data/scans/ \
-    --output-dir analysis/
+    --data-root data/scans/
+
+# Train the Decision Tree from pre-labeled CSVs
+risk-classifier-train \
+    --labels-dir data/labels/ \
+    --output-dir training-runs/
 
 # Classify a single SBOM (CI/CD pipeline workflow)
 risk-classifier-predict \
@@ -69,30 +72,52 @@ risk-classifier-predict \
 
 > **Docker Hub prerequisite:** All scan scripts pull images via Trivy and require `docker login` before running. Personal authenticated accounts are capped at **200 pulls per 6-hour window** — a hard constraint when scaling up image lists or using `-p` / `--parallel`.
 
+## Active Code: `software-prototype/`
+
+A CI/CD pipeline prototype with a GitHub Actions workflow (`.github/workflows/software-prototype-build.yml`) that triggers on changes to `software-prototype/`. The workflow:
+
+1. Builds and smoke-tests the Python app (`uv run software-prototype`)
+2. Builds package artifacts and a Docker image
+3. Runs Trivy to generate a CycloneDX SBOM and vulnerability report
+4. Enforces policy by failing CI on any `CRITICAL` vulnerability
+5. Uploads `dist/*` and scan reports as CI artifacts
+
+```bash
+cd software-prototype
+
+# Install dependencies
+make install    # runs: uv sync
+
+# Run the application
+make run        # runs: uv run software-prototype
+
+# Build and run Docker image
+make docker-build
+make docker-run
+```
+
 ## ML Pipeline Architecture
 
 The classifier operates on **structured feature vectors** extracted from tool outputs — it never processes raw source code or binary artifacts directly.
 
 **Three training label buckets** (each has a pre-scanned JSON directory and an image-list CSV):
-| Label bucket | Directory | Image list CSV |
-|---|---|---|
-| `ALLOW` candidates | `data/scans/high-qual/` | `data/image-lists/high-qual.csv` |
-| `WARN`/`BLOCK` candidates | `data/scans/aged-stale/` | `data/image-lists/aged-stale.csv` |
-| `BLOCK` candidates | `data/scans/known-vuln/` | `data/image-lists/known-vuln.csv` |
+| Label bucket | Directory | Image list CSV | Label CSV |
+|---|---|---|---|
+| `ALLOW` candidates | `data/scans/high-qual/` | `data/image-lists/high-qual.csv` | `data/labels/high-qual-labels.csv` |
+| `WARN`/`BLOCK` candidates | `data/scans/aged-stale/` | `data/image-lists/aged-stale.csv` | `data/labels/aged-stale-labels.csv` |
+| `BLOCK` candidates | `data/scans/known-vuln/` | `data/image-lists/known-vuln.csv` | `data/labels/known-vuln-labels.csv` |
 
-**Feature vector** (9 features, all from CycloneDX JSON produced by Trivy):
+**Feature vector** (8 features, all from CycloneDX JSON produced by Trivy):
 - `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`
-- `base_image_age_days` — two-tier: label fallback chain → Docker Hub public API
 - SAST features (`semgrep_total`, `semgrep_high_count`) are deferred from the current scope; see `research/ML_model/semgrep-feature-analysis.md` for rationale
 
-**Classification** is currently rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` constants in `src/classifier/sbom_extractor.py`). The Decision Tree model training step has not been implemented yet. Threshold rationale is in `ml-classifier/analysis/dataset-statistics.md`.
+**Classification** is rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` in `src/classifier/sbom_extractor.py`) for labeling, and Decision Tree (`DecisionTreeClassifier`) for ML training. Labels are frozen at scan time in `data/labels/` CSVs so threshold changes or Docker Hub API non-determinism produce a visible `git diff` rather than a silent accuracy drop. Threshold rationale is in `ml-classifier/analysis/dataset-statistics.md`.
 
 ## Key Design Decisions
 
 - Severity ratings use the **highest rating across all sources** per vulnerability (not NVD-only).
 - Top 25 CWEs reference the **MITRE 2025** list hardcoded in `TOP_25_CWES`.
 - SBOM format is **CycloneDX JSON** produced by `trivy image --format cyclonedx`.
-- `base_image_age_days` returns `0.0` when no timestamp label is found and the Docker Hub API call fails or times out (5s). Images where the tag was republished after scanning also return `0.0`.
 - The ML classifier is **not autonomous** — final deployment authority belongs to designated human reviewers with an override + retraining feedback loop.
 
 ## Research Documentation
