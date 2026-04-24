@@ -20,7 +20,7 @@ Text report output:
                                        classification report, decision tree rules
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Union
 
@@ -35,13 +35,14 @@ from sklearn.metrics import (
     classification_report,
     confusion_matrix,
 )
-from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split
+from sklearn.model_selection import StratifiedKFold, cross_val_predict, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.tree import DecisionTreeClassifier, export_text, plot_tree
 import joblib
 
 from . import sbom_extractor as _extractor
 from .sbom_extractor import FEATURES
+from .predictor import WARN_CONFIDENCE_THRESHOLD
 
 _log = logging.getLogger(__name__)
 
@@ -116,6 +117,11 @@ class TrainingResult:
     test_size_actual: int
     dataset_size: int
     class_distribution: Dict[str, int]
+
+    # Escalation policy metadata — documents the threshold applied during evaluation
+    # and how many test-set predictions were affected.
+    warn_escalated_count: int = 0
+    warn_confidence_threshold: float = field(default_factory=lambda: WARN_CONFIDENCE_THRESHOLD)
 
     # ------------------------------------------------------------------
     # Reporting
@@ -266,6 +272,11 @@ def write_classification_report(result: TrainingResult, output_dir: Path) -> Pat
         "",
         f"Test Accuracy      : {result.test_accuracy:.4f}",
         f"CV Accuracy        : {cv_mean:.4f} ± {cv_std:.4f} ({cv_folds}-fold stratified)",
+        "",
+        "Escalation Policy:",
+        f"  WARN confidence threshold : {result.warn_confidence_threshold:.2f}",
+        f"  WARNs escalated to BLOCK  : {result.warn_escalated_count} (test set)",
+        "  BLOCK predictions         : never downgraded",
         "",
         "Classification Report:",
         result.class_report_str,
@@ -630,16 +641,50 @@ class Trainer:
         clf.fit(X_train, y_train)
         _log.info("train: fit complete")
 
-        y_pred = clf.predict(X_test)
+        # Encode the class indices needed for the escalation gate.
+        # LabelEncoder sorts classes alphabetically: ALLOW=0, BLOCK=1, WARN=2.
+        warn_idx = int(le.transform(["WARN"])[0])
+        block_idx = int(le.transform(["BLOCK"])[0])
+
+        # Apply the same escalation policy as Predictor.predict():
+        # any WARN prediction whose confidence is below WARN_CONFIDENCE_THRESHOLD
+        # is promoted to BLOCK. BLOCK predictions are never touched.
+        # proba_test columns are ordered by clf.classes_ == [0, 1, 2], so
+        # column warn_idx gives P(WARN) for each sample.
+        y_pred_raw = clf.predict(X_test)
+        proba_test = clf.predict_proba(X_test)
+        escalate_mask = (y_pred_raw == warn_idx) & (proba_test[:, warn_idx] < WARN_CONFIDENCE_THRESHOLD)
+        y_pred = np.where(escalate_mask, block_idx, y_pred_raw)
+        warn_escalated_count = int(escalate_mask.sum())
+
         acc = float(accuracy_score(y_test, y_pred))
-        _log.info("train: test accuracy=%.4f on %d samples", acc, len(X_test))
+        _log.info(
+            "train: test accuracy=%.4f (escalated=%d WARNs→BLOCK) on %d samples",
+            acc, warn_escalated_count, len(X_test),
+        )
         report_str = classification_report(y_test, y_pred, target_names=le.classes_)
         cm = confusion_matrix(y_test, y_pred)
 
         cv = StratifiedKFold(
             n_splits=config.cv_folds, shuffle=True, random_state=config.random_state
         )
-        cv_scores = cross_val_score(clf, X_train, y_train, cv=cv, scoring="accuracy")
+
+        # Cross-validation: get out-of-fold (OOF) probabilities so the same
+        # escalation gate can be applied, keeping CV accuracy comparable to
+        # test accuracy. cross_val_predict fits a fresh model on each fold and
+        # returns predictions only for the held-out samples, in dataset order.
+        cv_proba = cross_val_predict(clf, X_train, y_train, cv=cv, method="predict_proba")
+        cv_pred_raw = np.argmax(cv_proba, axis=1)
+        cv_escalate_mask = (cv_pred_raw == warn_idx) & (cv_proba[:, warn_idx] < WARN_CONFIDENCE_THRESHOLD)
+        cv_pred_esc = np.where(cv_escalate_mask, block_idx, cv_pred_raw)
+
+        # Compute per-fold accuracy from the OOF predictions to get mean ± std.
+        # val_idx indexes into X_train/y_train, which matches the OOF array order.
+        cv_scores = np.array([
+            accuracy_score(y_train[val_idx], cv_pred_esc[val_idx])
+            for _, val_idx in cv.split(X_train, y_train)
+        ])
+
         _log.info(
             "train: CV accuracy=%.4f ± %.4f (%d-fold)",
             cv_scores.mean(), cv_scores.std(), len(cv_scores),
@@ -662,6 +707,8 @@ class Trainer:
             test_size_actual=len(X_test),
             dataset_size=len(df),
             class_distribution=class_dist,
+            warn_escalated_count=warn_escalated_count,
+            warn_confidence_threshold=WARN_CONFIDENCE_THRESHOLD,
         )
 
     def save_artifacts(self, result: TrainingResult, output_dir: Path) -> None:

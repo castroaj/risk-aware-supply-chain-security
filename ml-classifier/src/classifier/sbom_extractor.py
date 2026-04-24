@@ -41,8 +41,8 @@ BLOCK_THRESHOLDS: Dict[str, float] = {
 }
 
 WARN_THRESHOLDS: Dict[str, float] = {
-    "critical_cve_count":  10.0,
-    "cvss_ge_7_count":     100.0,
+    "critical_cve_count":  20.0,
+    "cvss_ge_7_count":     150.0,
     "unique_cwe_count":    40.0,
     "top25_cwe_count":     50.0,
 }

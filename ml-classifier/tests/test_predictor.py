@@ -14,8 +14,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from unittest.mock import MagicMock
+
 from classifier import sbom_extractor as _extractor
-from classifier.predictor import Predictor, PredictionResult
+from classifier.predictor import Predictor, PredictionResult, WARN_CONFIDENCE_THRESHOLD
 from classifier.trainer import Trainer
 
 
@@ -122,3 +124,87 @@ class TestPredictorPredictFromDict:
         """Empty dict (all features default to 0.0) does not raise."""
         result = predictor.predict_from_dict({})
         assert result.label in {"ALLOW", "WARN", "BLOCK"}
+
+
+# ---------------------------------------------------------------------------
+# Escalation policy
+# ---------------------------------------------------------------------------
+
+class TestEscalationPolicy:
+    """WARN confidence gating and BLOCK immutability."""
+
+    def _make_metric(self):
+        return _extractor.SecurityMetric(
+            scan_file="test",
+            **{f: 0.0 for f in _extractor.FEATURES},
+        )
+
+    def test_escalated_defaults_to_false(self, predictor, allow_metric):
+        """PredictionResult.escalated is False for normal predictions."""
+        result = predictor.predict(allow_metric)
+        assert result.escalated is False
+
+    def test_low_confidence_warn_escalates_to_block(self, predictor):
+        """WARN prediction with confidence below WARN_CONFIDENCE_THRESHOLD becomes BLOCK."""
+        metric = self._make_metric()
+
+        # Patch the model to always predict WARN with low confidence.
+        warn_idx = list(predictor._label_encoder.classes_).index("WARN")
+        n_classes = len(predictor._label_encoder.classes_)
+        low_conf = WARN_CONFIDENCE_THRESHOLD - 0.01
+        proba = [0.0] * n_classes
+        proba[warn_idx] = low_conf
+        # Distribute remaining probability among other classes.
+        other_share = (1.0 - low_conf) / max(n_classes - 1, 1)
+        for i in range(n_classes):
+            if i != warn_idx:
+                proba[i] = other_share
+
+        predictor._model.predict = MagicMock(return_value=[warn_idx])
+        predictor._model.predict_proba = MagicMock(return_value=[proba])
+
+        result = predictor.predict(metric)
+        assert result.label == "BLOCK"
+        assert result.escalated is True
+        assert result.confidence == pytest.approx(low_conf)
+
+    def test_high_confidence_warn_is_kept(self, predictor):
+        """WARN prediction with confidence >= WARN_CONFIDENCE_THRESHOLD is not escalated."""
+        metric = self._make_metric()
+
+        warn_idx = list(predictor._label_encoder.classes_).index("WARN")
+        n_classes = len(predictor._label_encoder.classes_)
+        high_conf = WARN_CONFIDENCE_THRESHOLD  # exactly at the threshold — kept as WARN
+        proba = [0.0] * n_classes
+        proba[warn_idx] = high_conf
+        other_share = (1.0 - high_conf) / max(n_classes - 1, 1)
+        for i in range(n_classes):
+            if i != warn_idx:
+                proba[i] = other_share
+
+        predictor._model.predict = MagicMock(return_value=[warn_idx])
+        predictor._model.predict_proba = MagicMock(return_value=[proba])
+
+        result = predictor.predict(metric)
+        assert result.label == "WARN"
+        assert result.escalated is False
+
+    def test_block_is_never_downgraded(self, predictor):
+        """BLOCK predictions are never changed regardless of confidence."""
+        metric = self._make_metric()
+
+        block_idx = list(predictor._label_encoder.classes_).index("BLOCK")
+        n_classes = len(predictor._label_encoder.classes_)
+        proba = [0.0] * n_classes
+        proba[block_idx] = 0.1  # very low confidence
+        other_share = 0.9 / max(n_classes - 1, 1)
+        for i in range(n_classes):
+            if i != block_idx:
+                proba[i] = other_share
+
+        predictor._model.predict = MagicMock(return_value=[block_idx])
+        predictor._model.predict_proba = MagicMock(return_value=[proba])
+
+        result = predictor.predict(metric)
+        assert result.label == "BLOCK"
+        assert result.escalated is False

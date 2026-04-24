@@ -25,6 +25,17 @@ from . import sbom_extractor as _extractor
 _log = logging.getLogger(__name__)
 
 
+
+# Minimum predict_proba confidence required to keep a WARN prediction.
+# If the model predicts WARN with confidence below this threshold the label is
+# escalated to BLOCK.  This embeds the asymmetric cost of a false negative
+# (letting a risky image through) vs. a false positive (blocking a safe image):
+# a developer can appeal a BLOCK, but a compromised image cannot be un-deployed.
+# BLOCK predictions are never affected — they are never downgraded regardless of
+# confidence.
+WARN_CONFIDENCE_THRESHOLD: float = 0.75
+
+
 @dataclass
 class PredictionResult:
     """
@@ -34,6 +45,8 @@ class PredictionResult:
         label:      Risk classification — one of "ALLOW", "WARN", "BLOCK".
         confidence: Probability of the predicted class from predict_proba(), or
                     None if the model does not support probability estimation.
+        escalated:  True when the model predicted WARN but confidence was below
+                    WARN_CONFIDENCE_THRESHOLD and the label was escalated to BLOCK.
 
     WHY:
         Wrapping label and confidence together lets callers pattern-match on the
@@ -43,6 +56,7 @@ class PredictionResult:
 
     label: str
     confidence: Optional[float]
+    escalated: bool = False
 
 
 class Predictor:
@@ -142,12 +156,28 @@ class Predictor:
             proba = self._model.predict_proba(vec)[0]
             confidence = float(proba[label_idx])
 
+        # Security escalation policy:
+        #   - BLOCK is never downgraded regardless of confidence.
+        #   - WARN is only kept when confidence >= WARN_CONFIDENCE_THRESHOLD.
+        #     Uncertain WARNs escalate to BLOCK because the cost of a false
+        #     negative (missed threat) exceeds the cost of a false positive
+        #     (blocked image that a developer can appeal).
+        escalated = False
+        if label == "WARN" and confidence is not None and confidence < WARN_CONFIDENCE_THRESHOLD:
+            _log.info(
+                "predictor: WARN escalated to BLOCK for %s (confidence=%.4f < %.2f)",
+                metric.scan_file, confidence, WARN_CONFIDENCE_THRESHOLD,
+            )
+            label = "BLOCK"
+            escalated = True
+
         _log.info(
-            "predictor: scan_file=%s label=%s confidence=%s",
+            "predictor: scan_file=%s label=%s confidence=%s escalated=%s",
             metric.scan_file, label,
             f"{confidence:.4f}" if confidence is not None else "N/A",
+            escalated,
         )
-        return PredictionResult(label=label, confidence=confidence)
+        return PredictionResult(label=label, confidence=confidence, escalated=escalated)
 
     def predict_from_dict(self, feature_dict: dict) -> PredictionResult:
         """
