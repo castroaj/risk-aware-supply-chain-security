@@ -4,53 +4,50 @@ Statistics computed from the three classification buckets used to calibrate the
 rule-based rubric in `sbom_extractor.py`.  All values are rounded to one decimal
 place.  `n` is the number of scanned images per bucket.
 
-Run `analysis/compute_statistics.py` from the `ml-classifier/` directory to reproduce.
+These statistics were computed at the time the label CSVs in `data/labels/` were generated.
 
 ---
 
 ## Per-Feature Statistics
 
-### high-qual (ALLOW) — n = 57
+### high-qual (ALLOW) — n = 172
 
 | Feature | min | median | mean | max |
 |---|---|---|---|---|
-| `total_dependency_count` | 0.0 | 93.0 | 114.9 | 397.0 |
-| `vuln_total` | 0.0 | 26.0 | 219.7 | 4255.0 |
-| `critical_cve_count` | 0.0 | 1.0 | 4.3 | 27.0 |
-| `high_cve_count` | 0.0 | 13.0 | 160.0 | 3200.0 |
-| `cvss_ge_7_count` | 0.0 | 10.0 | 63.7 | 1086.0 |
-| `max_cvss` | 0.0 | 9.8 | 8.8 | 10.0 |
-| `unique_cwe_count` | 0.0 | 17.0 | 24.5 | 127.0 |
-| `top25_cwe_count` | 0.0 | 8.0 | 74.3 | 1509.0 |
-| `base_image_age_days` | 0.0 | 47.0 | 262.9 | 779.0 |
+| `total_dependency_count` | 0.0 | 118.5 | 198.5 | 3141.0 |
+| `vuln_total` | 0.0 | 51.0 | 303.9 | 4734.0 |
+| `critical_cve_count` | 0.0 | 3.0 | 6.2 | 57.0 |
+| `high_cve_count` | 0.0 | 29.0 | 202.8 | 3553.0 |
+| `cvss_ge_7_count` | 0.0 | 18.5 | 83.2 | 1253.0 |
+| `max_cvss` | 0.0 | 10.0 | 9.0 | 10.0 |
+| `unique_cwe_count` | 0.0 | 25.0 | 37.0 | 145.0 |
+| `top25_cwe_count` | 0.0 | 16.0 | 101.7 | 1678.0 |
 
-### aged-stale (WARN) — n = 55
-
-| Feature | min | median | mean | max |
-|---|---|---|---|---|
-| `total_dependency_count` | 15.0 | 160.0 | 284.3 | 2313.0 |
-| `vuln_total` | 0.0 | 332.0 | 1503.9 | 7123.0 |
-| `critical_cve_count` | 0.0 | 32.0 | 35.3 | 100.0 |
-| `high_cve_count` | 0.0 | 215.0 | 981.1 | 4494.0 |
-| `cvss_ge_7_count` | 0.0 | 155.0 | 481.2 | 2003.0 |
-| `max_cvss` | 0.0 | 10.0 | 9.3 | 10.0 |
-| `unique_cwe_count` | 0.0 | 89.0 | 96.6 | 199.0 |
-| `top25_cwe_count` | 0.0 | 133.0 | 590.5 | 2666.0 |
-| `base_image_age_days` | 641.0 | 1627.0 | 1599.7 | 2210.0 |
-
-### known-vuln (BLOCK) — n = 31
+### aged-stale (WARN) — n = 154
 
 | Feature | min | median | mean | max |
 |---|---|---|---|---|
-| `total_dependency_count` | 77.0 | 286.0 | 527.9 | 2280.0 |
-| `vuln_total` | 0.0 | 412.0 | 432.5 | 1430.0 |
-| `critical_cve_count` | 0.0 | 56.0 | 57.7 | 144.0 |
-| `high_cve_count` | 0.0 | 275.0 | 295.9 | 1079.0 |
-| `cvss_ge_7_count` | 0.0 | 249.0 | 236.4 | 701.0 |
-| `max_cvss` | 0.0 | 10.0 | 9.7 | 10.0 |
-| `unique_cwe_count` | 0.0 | 75.0 | 75.1 | 161.0 |
-| `top25_cwe_count` | 0.0 | 166.0 | 202.8 | 699.0 |
-| `base_image_age_days` | 0.0 | 2683.0 | 2460.6 | 3392.0 |
+| `total_dependency_count` | 0.0 | 177.0 | 299.8 | 2313.0 |
+| `vuln_total` | 0.0 | 333.0 | 1195.2 | 7123.0 |
+| `critical_cve_count` | 0.0 | 38.0 | 38.8 | 112.0 |
+| `high_cve_count` | 0.0 | 218.5 | 809.5 | 4494.0 |
+| `cvss_ge_7_count` | 0.0 | 177.5 | 413.2 | 2003.0 |
+| `max_cvss` | 0.0 | 10.0 | 9.5 | 10.0 |
+| `unique_cwe_count` | 0.0 | 89.0 | 91.3 | 199.0 |
+| `top25_cwe_count` | 0.0 | 141.0 | 485.1 | 2666.0 |
+
+### known-vuln (BLOCK) — n = 45
+
+| Feature | min | median | mean | max |
+|---|---|---|---|---|
+| `total_dependency_count` | 77.0 | 272.0 | 468.1 | 2280.0 |
+| `vuln_total` | 0.0 | 412.0 | 457.1 | 1571.0 |
+| `critical_cve_count` | 0.0 | 57.0 | 60.0 | 144.0 |
+| `high_cve_count` | 0.0 | 275.0 | 315.2 | 1188.0 |
+| `cvss_ge_7_count` | 0.0 | 249.0 | 247.9 | 701.0 |
+| `max_cvss` | 0.0 | 10.0 | 9.8 | 10.0 |
+| `unique_cwe_count` | 0.0 | 79.0 | 79.9 | 161.0 |
+| `top25_cwe_count` | 0.0 | 168.0 | 216.1 | 779.0 |
 
 ---
 
@@ -60,20 +57,19 @@ Run `analysis/compute_statistics.py` from the `ml-classifier/` directory to repr
 
 | Feature | Tiers | Reason included |
 |---|---|---|
-| `critical_cve_count` | BLOCK ≥ 50, WARN ≥ 10 | Best single discriminator across all three buckets (medians: 1 / 32 / 56). Semantically unambiguous — a critical CVE is directly exploitable with no authentication in the worst case. |
-| `base_image_age_days` | BLOCK ≥ 2000, WARN ≥ 365 | Strong temporal signal. Medians are 47 / 1627 / 2683 — almost no overlap between ALLOW and WARN, good separation between WARN and BLOCK. One year (365) is a widely recognised industry threshold for "stale". |
-| `cvss_ge_7_count` | WARN ≥ 100 | Captures the volume of high-severity issues (CVSS ≥ 7). Medians 10 / 155 / 249 give clean ALLOW vs. WARN separation. Not used for BLOCK because `critical_cve_count` already handles the BLOCK-level signal with more specificity. |
-| `unique_cwe_count` | WARN ≥ 40 | A broad spread of distinct weakness categories signals systemic developer mistakes rather than a few unpatched packages. WARN-only: the BLOCK bucket (median=75) is *lower* than WARN (median=89) because intentionally-vulnerable apps tend to concentrate a narrow set of well-known exploitable CWEs, while aged-stale images accumulate wider variety. Threshold of 40 sits well above the ALLOW median (17). |
-| `top25_cwe_count` | BLOCK ≥ 150, WARN ≥ 50 | Counts findings that map to MITRE Top 25 most dangerous CWEs — directly captures the "many small bugs, no criticals" failure mode. An image with 100+ Top-25-CWE hits but zero critical CVEs still represents systematically poor code quality that should not receive ALLOW. Medians 8 / 133 / 166 give clean thresholds at both tiers. |
+| `critical_cve_count` | BLOCK ≥ 50, WARN ≥ 10 | Strong discriminator across all three buckets (medians: 3 / 38 / 57). Semantically unambiguous — a critical CVE is directly exploitable with no authentication in the worst case. |
+| `cvss_ge_7_count` | WARN ≥ 100 | Captures the volume of high-severity issues (CVSS ≥ 7). Medians 18.5 / 177.5 / 249.0 give clean ALLOW vs. WARN separation. Not used for BLOCK because `critical_cve_count` already handles the BLOCK-level signal with more specificity. |
+| `unique_cwe_count` | WARN ≥ 40 | A broad spread of distinct weakness categories signals systemic developer mistakes rather than a few unpatched packages. WARN-only: the BLOCK bucket (median=79) is *lower* than WARN (median=89) because intentionally-vulnerable apps tend to concentrate a narrow set of well-known exploitable CWEs, while aged-stale images accumulate wider variety. Threshold of 40 sits between the ALLOW median (25) and WARN median (89). |
+| `top25_cwe_count` | BLOCK ≥ 150, WARN ≥ 50 | Counts findings that map to MITRE Top 25 most dangerous CWEs — directly captures the "many small bugs, no criticals" failure mode. An image with 100+ Top-25-CWE hits but zero critical CVEs still represents systematically poor code quality that should not receive ALLOW. Medians 16 / 141 / 168 give clean thresholds at both tiers. |
 
 ### Excluded from rubric
 
 | Feature | Reason excluded |
 |---|---|
-| `total_dependency_count` | Reflects image size, not security posture. Medians 93 / 160 / 286 track complexity rather than risk; a large well-maintained image would be unfairly penalised. |
+| `total_dependency_count` | Reflects image size, not security posture. Medians 118.5 / 177 / 272 track complexity rather than risk; a large well-maintained image would be unfairly penalized. |
 | `vuln_total` | High correlation with `critical_cve_count`. Dominated by low/medium-severity findings. Using both double-counts the same underlying risk; `critical_cve_count` is more specific. |
 | `high_cve_count` | Correlated with both `critical_cve_count` and `cvss_ge_7_count`. Adding it would cause false WARN promotions for high-qual images without adding orthogonal signal. |
-| `max_cvss` | Near-useless discriminator: ALLOW median = 9.8, WARN = 10.0, BLOCK = 10.0. A single unpatched critical CVE anywhere pushes this to maximum. Cannot distinguish one critical CVE from 500. |
+| `max_cvss` | Near-useless discriminator: all three bucket medians are 10.0. A single unpatched critical CVE anywhere pushes this to maximum. Cannot distinguish one critical CVE from 500. |
 
 ---
 
@@ -87,19 +83,17 @@ single breach triggers that verdict level.
 
 | Feature | Threshold | Derivation |
 |---|---|---|
-| `critical_cve_count` | ≥ 50 | Sits between WARN median (32) and BLOCK median (56), well above ALLOW max (27). |
-| `top25_cwe_count` | ≥ 150 | Sits between WARN median (133) and BLOCK median (166); catches images with systemic high-danger weaknesses even when critical CVE count is low. |
-| `base_image_age_days` | ≥ 2000 | Slightly below BLOCK median (2683); catches the upper tail of aged-stale while not penalising images that are merely stale. The aged-stale max is 2210, so this threshold strictly separates most aged-stale from known-vuln. |
+| `critical_cve_count` | ≥ 50 | Sits between WARN median (38) and BLOCK median (57). |
+| `top25_cwe_count` | ≥ 150 | Sits between WARN median (141) and BLOCK median (168); catches images with systemic high-danger weaknesses even when critical CVE count is low. |
 
 ### WARN thresholds
 
 | Feature | Threshold | Derivation |
 |---|---|---|
-| `critical_cve_count` | ≥ 10 | Sits between ALLOW median (1) and WARN median (32); catches images that have accumulated double-digit critical CVEs without yet breaching the BLOCK tier. |
-| `cvss_ge_7_count` | ≥ 100 | Sits between ALLOW median (10) and WARN median (155); flags high-volume high-severity issue accumulation. |
-| `unique_cwe_count` | ≥ 40 | Sits between ALLOW median (17) and WARN median (89); captures broad attack-surface diversity without triggering on a few isolated weaknesses. |
-| `top25_cwe_count` | ≥ 50 | Sits between ALLOW median (8) and WARN median (133); catches images with a meaningful concentration of top-25-dangerous findings. |
-| `base_image_age_days` | ≥ 365 | Industry-standard "one year stale" threshold; ALLOW median is 47 days, WARN median is 1627 days — near-zero false positives at this cut. |
+| `critical_cve_count` | ≥ 10 | Sits between ALLOW median (3) and WARN median (38); catches images that have accumulated double-digit critical CVEs without yet breaching the BLOCK tier. |
+| `cvss_ge_7_count` | ≥ 100 | Sits between ALLOW median (18.5) and WARN median (177.5); flags high-volume high-severity issue accumulation. |
+| `unique_cwe_count` | ≥ 40 | Sits between ALLOW median (25) and WARN median (89); captures broad attack-surface diversity without triggering on a few isolated weaknesses. |
+| `top25_cwe_count` | ≥ 50 | Sits between ALLOW median (16) and WARN median (141); catches images with a meaningful concentration of top-25-dangerous findings. |
 
 ---
 
@@ -107,13 +101,8 @@ single breach triggers that verdict level.
 
 | Bucket | ALLOW | WARN | BLOCK | Total |
 |---|---|---|---|---|
-| high-qual | 35 | 19 | 3 | 57 |
-| aged-stale | 0 | 25 | 30 | 55 |
-| known-vuln | 0 | 3 | 28 | 31 |
+| high-qual | 110 | 45 | 17 | 172 |
+| aged-stale | 23 | 53 | 78 | 154 |
+| known-vuln | 3 | 14 | 28 | 45 |
 
-The 3 BLOCK results in high-qual are images with very high `top25_cwe_count`
-or `base_image_age_days` outliers; review of those scans confirms they are
-genuinely higher-risk than the median of that bucket.  The 3 WARN results in
-known-vuln are images where `base_image_age_days` returned `0.0` (Docker Hub
-lookup failed or tag was republished), suppressing the dominant BLOCK signal
-from that feature.
+The 17 BLOCK results in high-qual are images with high `top25_cwe_count` or `critical_cve_count`; review of those scans confirms they are genuinely higher-risk than the median of that bucket. The 23 ALLOW results in aged-stale reflect images sourced from that bucket that have low overall CVE counts and fall below all WARN thresholds despite their age.

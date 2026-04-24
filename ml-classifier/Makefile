@@ -2,12 +2,17 @@ VENV        := .venv
 PYTHON      := $(VENV)/bin/python
 PIP         := $(VENV)/bin/pip
 
-MANIFESTS   := data/image-lists/
-DATA_ROOT   := data/scans/
-LABELS_ROOT := data/labels/
-RUNS_DIR    := training-runs
-TIMESTAMP   := $(shell date +%Y%m%d-%H%M%S)
-OUTPUT_DIR  := $(RUNS_DIR)/$(TIMESTAMP)
+MANIFESTS    := data/image-lists/
+DATA_ROOT    := data/scans/
+LABELS_ROOT  := data/labels/
+RUNS_DIR     := training-runs
+TIMESTAMP    := $(shell date +%Y%m%d-%H%M%S)
+OUTPUT_DIR   := $(RUNS_DIR)/$(TIMESTAMP)
+
+# Hyper-params
+MIN_SAMPLES_SPLIT := 6
+MIN_SAMPLES_LEAF := 2
+CLASS_WEIGHT := '{"ALLOW":1, "WARN":2,"BLOCK":4}'
 
 .PHONY: install label test train clean build
 
@@ -31,7 +36,10 @@ train:
 	@echo "Output dir: $(OUTPUT_DIR)"
 	$(VENV)/bin/risk-classifier-train \
 		--labels-dir $(LABELS_ROOT) \
-		--output-dir $(OUTPUT_DIR)
+		--output-dir $(OUTPUT_DIR) \
+		--min-samples-split $(MIN_SAMPLES_SPLIT) \
+		--min-samples-leaf $(MIN_SAMPLES_LEAF) \
+		--class-weight $(CLASS_WEIGHT)
 
 ## build    — build a source distribution and wheel into dist/
 build:

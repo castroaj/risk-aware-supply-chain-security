@@ -64,11 +64,6 @@ Example features include:
   - `max_cvss`
   - `unique_cwe_count`
   - `top25_cwe_count`
-- SAST Scan (Semgrep) — *deferred; removed from current implementation scope (Use Case A)*
-  - `semgrep_total`
-  - `semgrep_high_count`
-- Build Metadata (container)
-  - `base_image_age_days`
 
 Each CI/CD run generates one feature vector. These features aim to capture an application's security profile without exploding dimensionality.
 

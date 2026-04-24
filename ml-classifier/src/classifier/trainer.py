@@ -49,7 +49,7 @@ _log = logging.getLogger(__name__)
 # Short axis labels for the correlation heatmap so axis text doesn't overlap.
 _SHORT_LABELS = [
     "dep_count", "vuln_total", "crit_cve", "high_cve",
-    "cvss≥7", "max_cvss", "uniq_cwe", "top25_cwe", "img_age_days",
+    "cvss≥7", "max_cvss", "uniq_cwe", "top25_cwe"
 ]
 
 
@@ -639,7 +639,7 @@ class Trainer:
         cv = StratifiedKFold(
             n_splits=config.cv_folds, shuffle=True, random_state=config.random_state
         )
-        cv_scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
+        cv_scores = cross_val_score(clf, X_train, y_train, cv=cv, scoring="accuracy")
         _log.info(
             "train: CV accuracy=%.4f ± %.4f (%d-fold)",
             cv_scores.mean(), cv_scores.std(), len(cv_scores),

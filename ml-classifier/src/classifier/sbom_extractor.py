@@ -1,11 +1,8 @@
 from json import load, dumps
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace, ArgumentTypeError
 import logging
-from typing import Dict, Any, Generator, List, Set, Union, Optional
-from urllib.request import urlopen
-from urllib.error import URLError
+from typing import Dict, Any, Generator, List, Set, Union
 from dataclasses import dataclass, fields as _dataclass_fields
-from datetime import datetime
 from pathlib import Path
 from pandas import DataFrame, concat
 
@@ -41,7 +38,6 @@ SEVERITY_WEIGHT:Dict[str, int] = {
 BLOCK_THRESHOLDS: Dict[str, float] = {
     "critical_cve_count":  50.0,
     "top25_cwe_count":     150.0,
-    "base_image_age_days": 2000.0,
 }
 
 WARN_THRESHOLDS: Dict[str, float] = {
@@ -49,17 +45,7 @@ WARN_THRESHOLDS: Dict[str, float] = {
     "cvss_ge_7_count":     100.0,
     "unique_cwe_count":    40.0,
     "top25_cwe_count":     50.0,
-    "base_image_age_days": 365.0,
 }
-
-# Define a series of fallback labels that may allow the date extraction
-# for the each containers age
-_LABEL_FALLBACK_CHAIN: List[str] = [
-    "aquasecurity:trivy:Labels:build-date",
-    "aquasecurity:trivy:Labels:org.opencontainers.image.created",
-    "aquasecurity:trivy:Labels:org.label-schema.build-date",
-    "aquasecurity:trivy:Labels:com.docker.dhi.created",
-]
 
 @dataclass
 class SecurityMetric:
@@ -78,7 +64,6 @@ class SecurityMetric:
     max_cvss: float
     unique_cwe_count: float
     top25_cwe_count: float
-    base_image_age_days: float
 
     def to_json(self) -> str:
         return dumps(self.__dict__)
@@ -88,8 +73,7 @@ class SecurityMetric:
             f"{self.scan_file},{self.total_dependency_count},{self.vuln_total},"
             f"{self.critical_cve_count},{self.high_cve_count},"
             f"{self.cvss_ge_7_count},{self.max_cvss},"
-            f"{self.unique_cwe_count},{self.top25_cwe_count},"
-            f"{self.base_image_age_days}"
+            f"{self.unique_cwe_count},{self.top25_cwe_count}"
         )
 
     @staticmethod
@@ -97,7 +81,7 @@ class SecurityMetric:
         return (
             "scan_file,total_dependency_count,vuln_total,critical_cve_count,"
             "high_cve_count,cvss_ge_7_count,max_cvss,unique_cwe_count,"
-            "top25_cwe_count,base_image_age_days"
+            "top25_cwe_count"
         )
 
 # Ordered list of feature names derived from SecurityMetric field definitions.
@@ -314,67 +298,6 @@ def extract_top25_cwe_count(sbom: Dict[str, Any]) -> float:
     except Exception as e:
         raise RuntimeError(f"Failed to extract top25_cwe_count: {e}")
 
-def extract_base_image_days(sbom: Dict[str, Any]) -> float:
-    """
-    **WHAT:**
-    - The `base_image_age_days` represents the number of days that have elapsed since the container base image was created.
-    - It acts as a temporal metric indicating the freshness of the underlying operating system and system-level dependencies.
-
-    **WHY:**
-    - Older base images are significantly more likely to contain unpatched vulnerabilities and security regressions.
-    - A high age indicates that the project is not regularly ingesting upstream security patches and updates.
-
-    **WHERE:**
-    - Tier 1: label fallback chain from `.metadata.component.properties`
-    - Tier 2: Docker Hub public API using the image reference from properties
-    """
-    try:
-        properties = sbom.get("metadata", {}).get("component", {}).get("properties", [])
-        prop_map: Dict[str, str] = {p.get("name", ""): p.get("value", "") for p in properties}
-
-        # Determine scan time
-        scan_timestamp_str = sbom.get("metadata", {}).get("timestamp")
-        scan_time: datetime = (
-            datetime.strptime(scan_timestamp_str[:19], "%Y-%m-%dT%H:%M:%S")
-            if scan_timestamp_str
-            else datetime.now()
-        )
-
-        # Tier 1 — label fallback chain
-        build_date_str = None
-        matched_label = None
-        for label in _LABEL_FALLBACK_CHAIN:
-            _log.debug("extract_base_image_days: trying Tier-1 label '%s'", label)
-            if label in prop_map and prop_map[label]:
-                build_date_str = prop_map[label]
-                matched_label = label
-                break
-
-        if build_date_str:
-            build_date = _parse_date_flexible(build_date_str)
-            if build_date:
-                age = float(max(0, (scan_time - build_date).days))
-                _log.info("extract_base_image_days: Tier-1 succeeded label='%s' age_days=%.0f", matched_label, age)
-                return age
-
-        # Tier 2 — Docker Hub API fallback
-        reference = prop_map.get("aquasecurity:trivy:Reference", "")
-        _log.debug("extract_base_image_days: Tier-1 failed, trying Tier-2 (Docker Hub) reference='%s'", reference)
-        if reference:
-            hub_date_str = _query_dockerhub_tag_date(reference)
-            if hub_date_str:
-                hub_date = _parse_date_flexible(hub_date_str)
-                if hub_date:
-                    age = float(max(0, (scan_time - hub_date).days))
-                    _log.info("extract_base_image_days: Tier-2 (Docker Hub) succeeded age_days=%.0f", age)
-                    return age
-
-        _log.info("extract_base_image_days: all tiers failed — returning 0.0")
-        return 0.0
-
-    except Exception as e:
-        raise RuntimeError(f"Failed to extract base_image_age_days: {e}")
-
 def _get_highest_severity(ratings: List[Dict[str, Any]]) -> int:
     """
     Helper function to find the highest severity weight from a list of ratings.
@@ -400,54 +323,6 @@ def _get_highest_score(ratings: List[Dict[str, Any]]) -> float:
         except (ValueError, TypeError):
             continue
     return max_score
-
-def _parse_date_flexible(date_str: str) -> Optional[datetime]:
-    """Parse a date string in any of the formats observed in the scan corpus."""
-    # Normalise: strip trailing Z, then truncate at + or . to get bare datetime
-    s = date_str.strip()
-    if s.endswith("Z"):
-        s = s[:-1]
-    # Drop sub-second precision and timezone offset
-    s = s.split(".")[0].split("+")[0]
-
-    for fmt in ["%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d", "%Y%m%d"]:
-        try:
-            result = datetime.strptime(s, fmt)
-            _log.debug("_parse_date_flexible: matched format='%s' input='%s'", fmt, date_str)
-            return result
-        except ValueError:
-            continue
-    return None
-
-def _query_dockerhub_tag_date(reference: str) -> Optional[str]:
-    """Query Docker Hub public API for the last_updated timestamp of a tag."""
-    try:
-        # Parse reference: [registry/][namespace/]image[:tag]
-        # Strip any registry prefix (contains a dot or colon with port)
-        parts = reference.split("/")
-        if len(parts) >= 2 and ("." in parts[0] or ":" in parts[0]):
-            parts = parts[1:]  # drop registry host
-
-        if len(parts) == 1:
-            namespace = "library"
-            image_and_tag = parts[0]
-        else:
-            namespace = parts[0]
-            image_and_tag = "/".join(parts[1:])
-
-        if ":" in image_and_tag:
-            image, tag = image_and_tag.rsplit(":", 1)
-        else:
-            image, tag = image_and_tag, "latest"
-
-        url = f"https://hub.docker.com/v2/repositories/{namespace}/{image}/tags/{tag}"
-        _log.debug("_query_dockerhub_tag_date: querying %s", url)
-        with urlopen(url, timeout=5) as resp:
-            data = load(resp)
-            return data.get("last_updated")
-    except (URLError, Exception) as exc:
-        _log.debug("_query_dockerhub_tag_date: request failed url=%s error=%s", url, exc)
-        return None
 
 def classify_metric(metric: SecurityMetric) -> str:
     """
@@ -496,8 +371,6 @@ def build_security_metric_from_sbom(
         _log.debug("build_security_metric: %s unique_cwe_count=%s", scan_file, unique_cwe_count)
         top25_cwe_count = extract_top25_cwe_count(sbom)
         _log.debug("build_security_metric: %s top25_cwe_count=%s", scan_file, top25_cwe_count)
-        base_image_age_days = extract_base_image_days(sbom)
-        _log.debug("build_security_metric: %s base_image_age_days=%s", scan_file, base_image_age_days)
         return SecurityMetric(
             scan_file=scan_file,
             total_dependency_count=total_dependency_count,
@@ -508,7 +381,6 @@ def build_security_metric_from_sbom(
             max_cvss=max_cvss,
             unique_cwe_count=unique_cwe_count,
             top25_cwe_count=top25_cwe_count,
-            base_image_age_days=base_image_age_days,
         )
     except Exception as e:
         raise RuntimeError(f"Failed to extract features and construct SecurityMetric: {e}")

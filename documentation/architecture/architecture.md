@@ -75,11 +75,8 @@ The extracted feature vector includes:
 - high_cve_count  
 - cvss_ge_7_count  
 - max_cvss  
-- unique_cwe_count  
-- top25_cwe_count  
-- semgrep_total (optional)  
-- semgrep_high_count (optional)  
-- base_image_age_days  
+- unique_cwe_count
+- top25_cwe_count
 
 See `research/ML_model/feature-extraction.md` for detailed rationale and extraction methodology.
 

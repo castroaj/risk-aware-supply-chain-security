@@ -116,8 +116,8 @@ def write_labels_csv(df: pd.DataFrame, path: Path) -> None:
     WHY:
         Freezes feature values and rule labels at the time of scanning so that
         subsequent training runs consume identical inputs. Label drift caused by
-        non-deterministic sources (Docker Hub API for base_image_age_days) becomes
-        visible as a diff rather than silently shifting model performance.
+        threshold changes becomes visible as a diff rather than silently shifting
+        model performance.
 
     Args:
         df:   DataFrame with at least REQUIRED_COLUMNS columns.
@@ -168,15 +168,15 @@ def load_bucket(
         reads the pre-labeled CSV directly — skipping SBOM JSON parsing and
         classify_metric() entirely. Otherwise, for each row in the manifest CSV,
         locates the SBOM JSON file, calls
-        sbom_extractor.build_security_metric_from_sbom() to extract the 9 features,
+        sbom_extractor.build_security_metric_from_sbom() to extract the 8 features,
         calls sbom_extractor.classify_metric() to obtain the rule-based label, and
         accumulates results into a DataFrame.
 
     WHY:
         Pre-labeled CSVs (written by write_labels_csv / risk-classifier-label) freeze
         feature values and rule labels so training is reproducible across runs.
-        Without them, classify_metric() is re-evaluated on every run and
-        base_image_age_days (which queries Docker Hub) can drift between runs.
+        Without them, classify_metric() is re-evaluated on every run and labels
+        can drift if thresholds change between runs.
 
     WHERE:
         Reads the manifest CSV and SBOM JSON files from the filesystem.
@@ -196,7 +196,7 @@ def load_bucket(
         pd.DataFrame with columns: scan_file, image, bucket, bucket_label,
         rule_label, total_dependency_count, vuln_total, critical_cve_count,
         high_cve_count, cvss_ge_7_count, max_cvss, unique_cwe_count,
-        top25_cwe_count, base_image_age_days.
+        top25_cwe_count.
     """
     if labels_csv is not None and labels_csv.exists():
         _log.info("load_bucket: reading pre-labeled CSV %s", labels_csv)

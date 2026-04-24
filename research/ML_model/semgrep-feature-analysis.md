@@ -14,7 +14,7 @@
 
 **`semgrep_high_count`** — the number of Semgrep findings assigned the highest severity level (`ERROR`). These findings correspond to known bad patterns that produce vulnerabilities such as SQL injection, XSS, and hardcoded credentials. A non-zero count signals explicit application-layer security defects requiring remediation before deployment.
 
-These features were designed to capture a distinct risk class: **application-layer coding defects**. This is a class of vulnerability that none of the other nine features address. The vulnerability scan features (`critical_cve_count`, `cvss_ge_7_count`, `top25_cwe_count`, etc.) report on CVEs in third-party packages and libraries. `base_image_age_days` captures temporal staleness. None of these detect SQL injection written by the developer, hardcoded credentials in application code, or XSS introduced in the application layer. SAST is the only feature category that does.
+These features were designed to capture a distinct risk class: **application-layer coding defects**. This is a class of vulnerability that none of the other eight features address. The vulnerability scan features (`critical_cve_count`, `cvss_ge_7_count`, `top25_cwe_count`, etc.) report on CVEs in third-party packages and libraries. None of these detect SQL injection written by the developer, hardcoded credentials in application code, or XSS introduced in the application layer. SAST is the only feature category that does.
 
 Both `classification-proposal.md` and `training-data-generation-plan.md` treat these features as active discriminators within the pipeline architecture. The classification pseudocode in `classification-proposal.md` (Section XII) includes both:
 
@@ -122,7 +122,7 @@ Many container images embed OCI-standard labels encoding the exact source reposi
 - `org.opencontainers.image.source` — URL of the source Git repository
 - `org.opencontainers.image.revision` — the exact git commit SHA
 
-These labels are present in the SBOM's `.metadata.component.properties` array — the same field queried by the existing `base_image_age_days` two-tier extraction logic. The extension would be:
+These labels are present in the SBOM's `.metadata.component.properties` array. The extension would be:
 
 1. Extract `org.opencontainers.image.source` and `org.opencontainers.image.revision` from the SBOM metadata
 2. Clone the repository and check out the exact SHA (`git clone` followed by `git checkout <sha>`; `--depth 1` is insufficient)

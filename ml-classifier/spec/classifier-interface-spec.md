@@ -26,7 +26,7 @@ Both classifiers consume the same `SecurityMetric` feature vector and produce th
 
 ## 2. Feature Vector Schema
 
-The `SecurityMetric` dataclass (defined in `src/classifier/sbom_extractor.py`) is the canonical feature vector. All 9 feature fields are `float`. The `scan_file` field is metadata, not a feature.
+The `SecurityMetric` dataclass (defined in `src/classifier/sbom_extractor.py`) is the canonical feature vector. All 8 feature fields are `float`. The `scan_file` field is metadata, not a feature.
 
 | Field | Type | Units | Valid Range | Source in CycloneDX SBOM |
 |---|---|---|---|---|
@@ -38,20 +38,10 @@ The `SecurityMetric` dataclass (defined in `src/classifier/sbom_extractor.py`) i
 | `max_cvss` | float | CVSS score | 0.0 – 10.0 | Maximum CVSS score across all vulnerability ratings |
 | `unique_cwe_count` | float | count | ≥ 0 | Number of distinct CWE IDs across all vulnerabilities |
 | `top25_cwe_count` | float | count | ≥ 0 | Number of vulns with ≥ 1 CWE in MITRE Top 25 (2025) |
-| `base_image_age_days` | float | days | ≥ 0 | Days between base image build date and scan timestamp |
-
-### Notes on `base_image_age_days`
-
-Extraction uses a two-tier strategy:
-
-1. **Label fallback chain** — checks `aquasecurity:trivy:Labels:build-date`, `org.opencontainers.image.created`, `org.label-schema.build-date`, and `com.docker.dhi.created` in `.metadata.component.properties`.
-2. **Docker Hub API** — if no label resolves, queries `hub.docker.com/v2/repositories/{namespace}/{image}/tags/{tag}` for `last_updated` (5-second timeout).
-
-Returns `0.0` when both tiers fail or when the tag was republished after scanning. A `0.0` value suppresses the age-based BLOCK and WARN signals — treat it as "age unknown," not as evidence of freshness.
 
 ### The `FEATURES` constant
 
-`sbom_extractor.FEATURES` is a `List[str]` of the 9 feature field names in the exact order they appear as `SecurityMetric` dataclass fields. It is the single source of truth for feature ordering across training, persistence, and prediction. Consumers must not hardcode this list.
+`sbom_extractor.FEATURES` is a `List[str]` of the 8 feature field names in the exact order they appear as `SecurityMetric` dataclass fields. It is the single source of truth for feature ordering across training, persistence, and prediction. Consumers must not hardcode this list.
 
 ---
 
@@ -73,7 +63,7 @@ Returns `0.0` when both tiers fail or when the tag was republished after scannin
 | `aged-stale-labels.csv` | `aged-stale` | WARN |
 | `known-vuln-labels.csv` | `known-vuln` | BLOCK |
 
-Each CSV must contain `REQUIRED_COLUMNS`: `scan_file, image, bucket, bucket_label, rule_label` + the 9 feature fields. These are the files produced by `risk-classifier-label` / `write_labels_csv()`. Training does not read SBOM JSON files or manifest CSVs — all required information is already present in the label CSVs.
+Each CSV must contain `REQUIRED_COLUMNS`: `scan_file, image, bucket, bucket_label, rule_label` + the 8 feature fields. These are the files produced by `risk-classifier-label` / `write_labels_csv()`. Training does not read SBOM JSON files or manifest CSVs — all required information is already present in the label CSVs.
 
 Missing CSVs emit a `WARNING` log record and that bucket is skipped. All three missing raises `RuntimeError`.
 
@@ -104,7 +94,7 @@ All artifacts are written to `output_dir`. The three pkl files form an **insepar
 |---|---|---|---|
 | Trained model | `decision_tree_model.pkl` | joblib | `sklearn.tree.DecisionTreeClassifier` fitted on training split |
 | Label encoder | `label_encoder.pkl` | joblib | `sklearn.preprocessing.LabelEncoder` fitted on `{"ALLOW", "WARN", "BLOCK"}` |
-| Feature names | `feature_names.pkl` | joblib | `List[str]` of length 9 — same order the model was trained on |
+| Feature names | `feature_names.pkl` | joblib | `List[str]` of length 8 — same order the model was trained on |
 | Text report | `classification_report.txt` | UTF-8 text | Dataset summary, accuracy, CV scores, sklearn classification report, decision tree rules |
 | Confusion matrix | `confusion_matrix.png` | PNG, 150 dpi | Heatmap of test-set predictions vs. ground truth |
 | Decision tree | `decision_tree.png` | PNG, 150 dpi | Rendered tree (max_depth=5) with filled nodes and impurity values |
@@ -136,7 +126,7 @@ for file_path, sbom in _extractor.read_path_data(Path("image.json")):
 ```python
 result = predictor.predict_from_dict({
     "critical_cve_count": 55.0,
-    "base_image_age_days": 2100.0,
+    "top25_cwe_count": 200.0,
 })
 ```
 
@@ -231,8 +221,6 @@ Log format: `%(asctime)s [%(levelname)s] %(name)s: %(message)s`
 **DEBUG records relevant to development:**
 - Per-feature extracted value for each SBOM
 - Per-fold CV scores
-- Docker Hub API URL and timeout outcomes
-- Date parse format matched
 
 ### 5.4 Usage examples
 
@@ -292,8 +280,6 @@ The `Makefile` in `ml-classifier/` provides targets for all common development t
 - **Current dataset is 143 images.** The Decision Tree trained on this dataset tends to reproduce the rule-based thresholds rather than discover new boundaries. See `analysis/rule-based-vs-decision-tree.md`. Meaningful ML generalization begins around 1,400+ images with independent human labels.
 
 - **MITRE Top 25 CWEs are the 2025 edition**, hardcoded in `sbom_extractor.TOP_25_CWES`. This list must be updated manually when MITRE publishes a new annual list.
-
-- **`base_image_age_days` returns `0.0` on extraction failure.** This suppresses the age-based BLOCK signal for images where the tag was republished after scanning or where no date metadata is available. Do not interpret `0.0` as evidence of a fresh image.
 
 - **The three pkl artifacts are version-coupled.** `decision_tree_model.pkl`, `label_encoder.pkl`, and `feature_names.pkl` must always be loaded together from the same training run. Mixing artifacts from different runs produces undefined predictions.
 
