@@ -406,6 +406,8 @@ def _run_predict(args: Namespace) -> None:
         row = {**metric.__dict__, "ml_label": prediction.label}
         if prediction.confidence is not None:
             row["ml_confidence"] = round(prediction.confidence, 4)
+        if prediction.escalated:
+            row["ml_escalated"] = True
         rows.append(row)
 
     if not rows:

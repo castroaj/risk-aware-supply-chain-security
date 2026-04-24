@@ -82,24 +82,24 @@ risk-classifier-predict \
 
 All three commands accept `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file FILE` for audit logging.
 
-### Current model — v0.0.3
+### Current model — v0.0.4
 
-Trained on 371 container images across three label buckets (ALLOW=136, BLOCK=123, WARN=112).
+Trained on 371 container images across three label buckets (ALLOW=144, BLOCK=123, WARN=104).
 
 | Metric | Value |
 |---|---|
 | Dataset | 371 images (train=296 / test=75) |
-| Test accuracy | 93.33% |
-| CV accuracy | 97.29% ± 2.30% (5-fold stratified) |
-| ALLOW F1 | 0.94 |
-| WARN F1 | 0.89 |
+| Test accuracy | 97.33% |
+| CV accuracy | 96.96% ± 1.97% (5-fold stratified) |
+| ALLOW F1 | 0.96 |
+| WARN F1 | 1.00 |
 | BLOCK F1 | 0.96 |
 
 Hyperparameters: `max_depth=5`, `min_samples_split=6`, `min_samples_leaf=2`, `class_weight={'ALLOW':1,'WARN':2,'BLOCK':4}`, `random_state=42`.
 
-Key changes from v0.0.2: WARN thresholds tightened (`critical_cve_count` 10→20, `cvss_ge_7_count` 100→150) to reduce the WARN bucket to genuinely borderline images; class weights shifted from `balanced` to explicit values that penalise missed BLOCKs four times more than missed ALLOWs; BLOCK recall is 1.00 (no missed BLOCKs on the test set).
+Key changes from v0.0.3: WARN thresholds further tightened (`critical_cve_count` 10→20, `cvss_ge_7_count` 100→150), shifting 8 images out of WARN into ALLOW and producing a cleaner ALLOW/WARN decision boundary; WARN F1 reaches 1.00 (perfect precision and recall on the test set); a confidence-based escalation policy is applied at prediction time — WARN predictions below 0.75 confidence are promoted to BLOCK, and BLOCK is never downgraded.
 
-Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.3/`](./ml-classifier/model-results/model-0.0.3/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
+Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.4/`](./ml-classifier/model-results/model-0.0.4/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
 
 ### Feature vector (8 features)
 

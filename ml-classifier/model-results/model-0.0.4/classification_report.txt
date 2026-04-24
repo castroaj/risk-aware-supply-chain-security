@@ -1,0 +1,50 @@
+Risk-Aware Supply Chain Security — Decision Tree Classifier
+============================================================
+
+Dataset size       : 371 images
+Train / Test split : 296 / 75
+Class distribution : ALLOW=144, BLOCK=123, WARN=104
+
+Hyperparameters:
+  criterion         : gini
+  max_depth         : 5
+  min_samples_split : 6
+  min_samples_leaf  : 2
+  class_weight      : {'ALLOW': 1, 'WARN': 2, 'BLOCK': 4}
+  random_state      : 42
+  test_size         : 0.20
+  cv_folds          : 5
+
+Test Accuracy      : 0.9733
+CV Accuracy        : 0.9696 ± 0.0197 (5-fold stratified)
+
+Escalation Policy:
+  WARN confidence threshold : 0.75
+  WARNs escalated to BLOCK  : 2 (test set)
+  BLOCK predictions         : never downgraded
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       ALLOW       1.00      0.93      0.96        29
+       BLOCK       0.93      1.00      0.96        25
+        WARN       1.00      1.00      1.00        21
+
+    accuracy                           0.97        75
+   macro avg       0.98      0.98      0.98        75
+weighted avg       0.98      0.97      0.97        75
+
+Decision Tree Rules:
+|--- top25_cwe_count <= 143.00
+|   |--- unique_cwe_count <= 39.50
+|   |   |--- critical_cve_count <= 14.50
+|   |   |   |--- class: 0
+|   |   |--- critical_cve_count >  14.50
+|   |   |   |--- class: 2
+|   |--- unique_cwe_count >  39.50
+|   |   |--- critical_cve_count <= 49.00
+|   |   |   |--- class: 2
+|   |   |--- critical_cve_count >  49.00
+|   |   |   |--- class: 1
+|--- top25_cwe_count >  143.00
+|   |--- class: 1
