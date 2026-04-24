@@ -82,22 +82,24 @@ risk-classifier-predict \
 
 All three commands accept `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file FILE` for audit logging.
 
-### Current model — v0.0.2
+### Current model — v0.0.3
 
-Trained on 371 container images across three label buckets (ALLOW=96, BLOCK=124, WARN=151).
+Trained on 371 container images across three label buckets (ALLOW=136, BLOCK=123, WARN=112).
 
 | Metric | Value |
 |---|---|
 | Dataset | 371 images (train=296 / test=75) |
-| Test accuracy | 96.00% |
-| CV accuracy | 95.70% ± 2.29% (5-fold stratified) |
-| ALLOW F1 | 0.92 |
-| WARN F1 | 0.95 |
-| BLOCK F1 | 1.00 |
+| Test accuracy | 93.33% |
+| CV accuracy | 97.29% ± 2.30% (5-fold stratified) |
+| ALLOW F1 | 0.94 |
+| WARN F1 | 0.89 |
+| BLOCK F1 | 0.96 |
 
-Hyperparameters: `max_depth=5`, `min_samples_split=4`, `min_samples_leaf=2`, `class_weight=balanced`, `random_state=42`.
+Hyperparameters: `max_depth=5`, `min_samples_split=6`, `min_samples_leaf=2`, `class_weight={'ALLOW':1,'WARN':2,'BLOCK':4}`, `random_state=42`.
 
-Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.2/`](./ml-classifier/model-results/model-0.0.2/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
+Key changes from v0.0.2: WARN thresholds tightened (`critical_cve_count` 10→20, `cvss_ge_7_count` 100→150) to reduce the WARN bucket to genuinely borderline images; class weights shifted from `balanced` to explicit values that penalise missed BLOCKs four times more than missed ALLOWs; BLOCK recall is 1.00 (no missed BLOCKs on the test set).
+
+Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.3/`](./ml-classifier/model-results/model-0.0.3/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
 
 ### Feature vector (8 features)
 
