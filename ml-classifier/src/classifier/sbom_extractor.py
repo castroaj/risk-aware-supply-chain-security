@@ -396,14 +396,15 @@ def classify_metric_threshold(metric: SecurityMetric) -> LabelResult:
     return LabelResult(label=classify_metric(metric))
 
 
-def classify_metric_llm(metric: SecurityMetric, backend: "Any") -> LabelResult:
+def classify_metric_llm(metric: SecurityMetric, backend: "Any", system_prompt_path: "Any" = None) -> LabelResult:
     """
     LLM-based labeler that sends the feature vector to an LLM backend for classification.
 
     WHAT:
-        Builds a compact JSON user message from the metric, sends it along with the
-        labeling system prompt to the provided backend, and parses the structured
-        JSON response into a LabelResult with label, justification, and confidence.
+        Loads the system prompt from a versioned file, builds a compact JSON user
+        message from the metric, sends both to the provided backend, and parses the
+        structured JSON response into a LabelResult with label, justification, and
+        confidence.
 
     WHY:
         Unlike classify_metric(), this function reasons holistically over all 8 features
@@ -413,23 +414,27 @@ def classify_metric_llm(metric: SecurityMetric, backend: "Any") -> LabelResult:
         reasoning rather than arithmetic.
 
     WHERE:
-        Delegates prompt construction to llm_labeler.build_user_message() and
-        response parsing to llm_labeler.parse_llm_response(). The API call itself
-        is handled by the backend object (e.g. AnthropicBackend).
+        Delegates prompt loading to llm_labeler.load_system_prompt(), message
+        construction to llm_labeler.build_user_message(), and response parsing to
+        llm_labeler.parse_llm_response(). The API call is handled by the backend.
 
     Args:
-        metric:  Feature vector for one image.
-        backend: Any object satisfying the LLMBackend protocol
-                 (has a complete(system: str, user: str) -> str method).
+        metric:             Feature vector for one image.
+        backend:            Any object satisfying the LLMBackend protocol
+                            (has a complete(system: str, user: str) -> str method).
+        system_prompt_path: Path to the versioned system prompt file. Defaults to
+                            llm_labeler.DEFAULT_SYSTEM_PROMPT_PATH (latest version).
 
     Returns:
         LabelResult with label, justification, and confidence populated.
     """
-    from .llm_labeler import SYSTEM_PROMPT, build_user_message, parse_llm_response
+    from .llm_labeler import load_system_prompt, build_user_message, parse_llm_response, DEFAULT_SYSTEM_PROMPT_PATH
 
+    prompt_path = system_prompt_path if system_prompt_path is not None else DEFAULT_SYSTEM_PROMPT_PATH
+    system_prompt = load_system_prompt(prompt_path)
     user_msg = build_user_message(metric)
     _log.debug("classify_metric_llm: sending request for scan_file=%s", metric.scan_file)
-    raw = backend.complete(SYSTEM_PROMPT, user_msg)
+    raw = backend.complete(system_prompt, user_msg)
     result = parse_llm_response(raw)
     _log.info(
         "classify_metric_llm: label=%s confidence=%s scan_file=%s",

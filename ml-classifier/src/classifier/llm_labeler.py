@@ -4,7 +4,8 @@ llm_labeler.py
 LLM-based labeling logic for SBOM security classification.
 
 This module owns three concerns:
-    1. SYSTEM_PROMPT — the labeling rubric sent to the LLM on every call.
+    1. load_system_prompt() — loads the labeling rubric from a versioned text
+       file in config/. Defaults to the latest version via DEFAULT_SYSTEM_PROMPT_PATH.
     2. build_user_message() — converts a SecurityMetric into a compact JSON
        user message (~80–120 tokens) without ever sending raw SBOM content.
     3. parse_llm_response() — converts the model's raw text reply into a
@@ -12,6 +13,12 @@ This module owns three concerns:
 
 The actual LLM API call lives in the backend (e.g. AnthropicBackend.complete).
 This module has no knowledge of which provider is used.
+
+System prompt versioning:
+    Prompt files live in config/system-prompt-vN.txt relative to the package root.
+    The DEFAULT_SYSTEM_PROMPT_PATH constant points to the latest version.
+    Changing the prompt file is a labeling-breaking change — commit the updated
+    file, regenerate label CSVs, and bump the model version.
 
 Token budget per image (approximate):
     System prompt : ~600 tokens
@@ -23,6 +30,7 @@ Token budget per image (approximate):
 
 import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -30,80 +38,45 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# System prompt — versioned labeling rubric sent to the LLM on every call.
-# Treat this as an immutable artifact for a given model version: changes here
-# should trigger a full re-labeling run and a new model version commit.
-# Version: v1
-# ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """\
-You are a supply chain security analyst responsible for classifying container \
-images based on their vulnerability and dependency profiles. You will be given \
-a structured feature vector extracted from a CycloneDX SBOM scan produced by Trivy.
+# Root of the ml-classifier project (three levels up from this file:
+# src/classifier/llm_labeler.py → src/classifier/ → src/ → ml-classifier/)
+_PROJECT_ROOT = Path(__file__).parent.parent.parent
 
-Your task is to assign one of three deployment risk labels:
-  ALLOW — The image meets acceptable security standards and may be deployed.
-  WARN  — The image has moderate risk. It should be reviewed before deployment \
-and may require remediation.
-  BLOCK — The image has critical or systemic risk and must not be deployed \
-without explicit security team approval and a remediation plan.
+# Path to the latest versioned system prompt file.
+# Update this constant when a new prompt version is added to config/.
+DEFAULT_SYSTEM_PROMPT_PATH: Path = _PROJECT_ROOT / "config" / "system-prompt-v1.txt"
 
-## Feature Definitions
 
-Each feature vector contains exactly these fields:
+def load_system_prompt(path: Path = DEFAULT_SYSTEM_PROMPT_PATH) -> str:
+    """
+    Load the LLM labeling system prompt from a versioned text file.
 
-| Feature                | Description                                                                  |
-|------------------------|------------------------------------------------------------------------------|
-| total_dependency_count | Total number of software components declared in the SBOM                     |
-| vuln_total             | Total number of vulnerabilities detected across all components               |
-| critical_cve_count     | Number of CVEs rated CRITICAL severity (highest across all rating sources)   |
-| high_cve_count         | Number of CVEs rated HIGH severity                                           |
-| cvss_ge_7_count        | Number of vulnerabilities with a CVSS score >= 7.0                           |
-| max_cvss               | Highest single CVSS score found in the scan                                  |
-| unique_cwe_count       | Number of distinct CWE weakness types present                                |
-| top25_cwe_count        | Number of vulnerabilities matching the MITRE CWE Top 25 (2025 list)         |
+    WHAT:
+        Reads and returns the contents of the given prompt file. Raises
+        FileNotFoundError with a clear message if the file does not exist,
+        so misconfigured paths fail loudly before any API calls are made.
 
-## Labeling Guidance
+    WHY:
+        Externalizing the prompt to a file means changes are visible as a
+        plain-text git diff rather than buried in Python source. The versioned
+        filename (system-prompt-v1.txt, v2.txt, ...) makes it explicit when
+        the labeling rubric has changed and a re-labeling run is required.
 
-Evaluate the full feature vector holistically. Do not evaluate any single \
-feature in isolation.
+    Args:
+        path: Path to the system prompt file. Defaults to DEFAULT_SYSTEM_PROMPT_PATH
+              (the latest version in config/).
 
-BLOCK when:
-- One or more CRITICAL CVEs exist alongside systemic weakness breadth (elevated \
-unique_cwe_count or top25_cwe_count), suggesting the image is broadly \
-compromised, not just incidentally vulnerable.
-- The max_cvss is near or at 10.0 and is accompanied by a non-trivial \
-critical_cve_count, indicating a directly exploitable, high-impact vulnerability.
-- The combination of vuln_total, high_cve_count, and top25_cwe_count together \
-indicate a pattern of known, actively exploited weaknesses at scale.
-
-WARN when:
-- The image has no CRITICAL CVEs but has multiple HIGH CVEs or a non-trivial \
-cvss_ge_7_count, suggesting actionable but not immediately catastrophic risk.
-- The unique_cwe_count or top25_cwe_count is elevated relative to \
-total_dependency_count, indicating a disproportionate weakness density.
-- The max_cvss is in the 7.0–9.9 range without accompanying CRITICAL counts.
-
-ALLOW when:
-- No CRITICAL CVEs are present, HIGH CVEs are minimal or absent, and max_cvss \
-is below 7.0.
-- Any vulnerabilities present are low-severity, low-density, and not part of \
-the MITRE Top 25.
-
-## Output Format
-
-Respond only with a valid JSON object. Do not include any text outside the \
-JSON block. Do not wrap the JSON in markdown code fences.
-
-{
-  "label": "ALLOW" | "WARN" | "BLOCK",
-  "confidence": "high" | "medium" | "low",
-  "justification": "<1-2 sentences citing specific numeric feature values from the input and why they indicate this risk level. Max 50 words.>"
-}
-
-The justification must reference specific feature values from the input. \
-Do not produce generic reasoning.\
-"""
+    Returns:
+        The full text of the system prompt, stripped of trailing whitespace.
+    """
+    if not path.exists():
+        raise FileNotFoundError(
+            f"System prompt file not found: {path}\n"
+            "Ensure config/system-prompt-vN.txt exists or pass a valid --system-prompt path."
+        )
+    text = path.read_text(encoding="utf-8").rstrip()
+    _log.debug("load_system_prompt: loaded %d chars from %s", len(text), path)
+    return text
 
 
 def build_user_message(metric: "SecurityMetric") -> str:

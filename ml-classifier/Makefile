@@ -17,20 +17,23 @@ CLASS_WEIGHT := '{"ALLOW":1, "WARN":2,"BLOCK":4}'
 # LLM labeling — set via environment or make argument.
 #
 # Anthropic (default):
-#   make label-llm
-#   make label-llm LLM_MODEL=claude-haiku-4-5-20251001
-#   ANTHROPIC_API_KEY=sk-ant-... make label-llm
+#   make label-llm-anthropic
+#   make label-llm-anthropic LLM_MODEL=claude-haiku-4-5-20251001
+#   make label-llm-anthropic SYSTEM_PROMPT=config/system-prompt-v2.txt
+#   ANTHROPIC_API_KEY=sk-ant-... make label-llm-anthropic
 #
 # Gemini:
 #   make label-llm-gemini
-#   make label-llm-gemini LLM_MODEL=gemini-1.5-pro
+#   make label-llm-gemini GEMINI_MODEL=gemini-2.5-flash
+#   make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.txt
 #   GEMINI_API_KEY=AIza... make label-llm-gemini
 LLM_MODEL            ?= claude-sonnet-4-6
 LLM_API_KEY          ?= $(ANTHROPIC_API_KEY)
 GEMINI_MODEL         ?= gemini-2.5-flash
 GEMINI_API_KEY       ?= $(GEMINI_API_KEY)
+SYSTEM_PROMPT        ?= config/system-prompt-v1.txt
 
-.PHONY: install label label-llm label-llm-gemini test train clean build
+.PHONY: install label label-llm-anthropic label-llm-gemini test train clean build
 
 ## install  — create venv and install package in editable mode with dev extras
 install:
@@ -52,9 +55,10 @@ label-llm-anthropic:
 		--labeler-mode llm \
 		--llm-provider anthropic \
 		--llm-model $(LLM_MODEL) \
-		--llm-api-key $(LLM_API_KEY)
+		--llm-api-key $(LLM_API_KEY) \
+		--system-prompt $(SYSTEM_PROMPT)
 
-## label-llm-gemini — LLM-assisted labels via Google Gemini (gemini-2.0-flash by default)
+## label-llm-gemini — LLM-assisted labels via Google Gemini (gemini-2.5-flash by default)
 label-llm-gemini:
 	$(VENV)/bin/risk-classifier-label \
 		--manifests-dir $(MANIFESTS) \
@@ -63,7 +67,8 @@ label-llm-gemini:
 		--labeler-mode llm \
 		--llm-provider gemini \
 		--llm-model $(GEMINI_MODEL) \
-		--llm-api-key $(GEMINI_API_KEY)
+		--llm-api-key $(GEMINI_API_KEY) \
+		--system-prompt $(SYSTEM_PROMPT)
 
 ## test     — run the full test suite
 test:

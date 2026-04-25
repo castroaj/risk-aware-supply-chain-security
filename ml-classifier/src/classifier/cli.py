@@ -520,6 +520,17 @@ def _parse_label_args() -> Namespace:
             "Required when --labeler-mode=llm."
         ),
     )
+    parser.add_argument(
+        "--system-prompt",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to a versioned system prompt file (e.g. config/system-prompt-v1.txt). "
+            "Defaults to the latest version in config/. "
+            "Only used when --labeler-mode=llm."
+        ),
+    )
     _add_logging_args(parser)
     return parser.parse_args()
 
@@ -590,11 +601,15 @@ def _build_labeler(args: Namespace):
         from classifier.backends.gemini_backend import GeminiBackend
         backend = GeminiBackend(api_key=api_key, model=args.llm_model)
 
-    _log.info("label: using LLM labeler (provider=%s model=%s)", provider, args.llm_model)
+    system_prompt_path = args.system_prompt  # None → classify_metric_llm uses default
+    _log.info(
+        "label: using LLM labeler (provider=%s model=%s prompt=%s)",
+        provider, args.llm_model, system_prompt_path or "default",
+    )
 
     # Return a closure so load_bucket receives the standard labeler signature.
     def llm_labeler(metric):
-        return classify_metric_llm(metric, backend)
+        return classify_metric_llm(metric, backend, system_prompt_path)
 
     return llm_labeler
 
