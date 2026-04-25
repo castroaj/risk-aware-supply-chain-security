@@ -59,6 +59,22 @@ Training dataset: 172 well-maintained images (ALLOW), 154 aged/stale images (WAR
 
 ---
 
+## Results
+
+Model development has proceeded iteratively, with each version addressing a specific weakness identified in the previous round. Detailed metrics and artifacts are preserved in `ml-classifier/model-results/`.
+
+**Initial Prototype** established that the pipeline was feasible. The classifier could separate ALLOW from BLOCK reliably, but the WARN class—images that fall between clearly safe and clearly dangerous—was its weakest point. This run confirmed the architecture worked and identified deliberate model design as the next priority.
+
+**model-0.0.1** introduced structured hyperparameters and added image age as a temporal feature. The tree reorganized around age as its primary decision point and WARN performance improved substantially. The remaining concern was high variance across cross-validation folds, signaling that 143 training images were not enough to produce a stable model.
+
+**model-0.0.2** addressed that directly with a major dataset expansion—143 to 371 images. Cross-validation variance dropped significantly, confirming the instability had been a data quantity problem rather than a modeling one.
+
+**model-0.0.3** introduced two conceptual shifts. Image age was removed from the feature vector: although it was a strong predictor, it was strong for the wrong reason—the WARN bucket had been built from images in a specific age range, so the model was learning dataset construction logic rather than generalizable risk signal. Class weighting was also changed from balanced to asymmetric, explicitly encoding the fact that a missed threat carries a higher cost than a false alarm. Alongside these changes, a set of borderline images were recalibrated from WARN to ALLOW after the WARN thresholds were found to be too aggressive for moderate-risk profiles.
+
+**model-0.0.4** *(current)* continued that label refinement and introduced a confidence-based escalation policy: WARN predictions below a confidence threshold are automatically promoted to BLOCK, embedding cost asymmetry directly into the inference path rather than relying solely on training weights. The result is the cleanest tree structure to date and the strongest overall accuracy at 97.33%, with the WARN class reaching perfect classification on the test set.
+
+---
+
 ## Next Steps
 
 The current system establishes a working, interpretable pipeline and proves the viability of ML-gated deployment decisions. Several high-value extensions would substantially strengthen both the scientific contribution and practical coverage.
