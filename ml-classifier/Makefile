@@ -14,18 +14,56 @@ MIN_SAMPLES_SPLIT := 6
 MIN_SAMPLES_LEAF := 2
 CLASS_WEIGHT := '{"ALLOW":1, "WARN":2,"BLOCK":4}'
 
-.PHONY: install label test train clean build
+# LLM labeling — set via environment or make argument.
+#
+# Anthropic (default):
+#   make label-llm
+#   make label-llm LLM_MODEL=claude-haiku-4-5-20251001
+#   ANTHROPIC_API_KEY=sk-ant-... make label-llm
+#
+# Gemini:
+#   make label-llm-gemini
+#   make label-llm-gemini LLM_MODEL=gemini-1.5-pro
+#   GEMINI_API_KEY=AIza... make label-llm-gemini
+LLM_MODEL            ?= claude-sonnet-4-6
+LLM_API_KEY          ?= $(ANTHROPIC_API_KEY)
+GEMINI_MODEL         ?= gemini-2.5-flash
+GEMINI_API_KEY       ?= $(GEMINI_API_KEY)
+
+.PHONY: install label label-llm label-llm-gemini test train clean build
 
 ## install  — create venv and install package in editable mode with dev extras
 install:
 	./setup.sh
 
-## label    — extract features and assign rule labels; write per-bucket CSVs to data/scans/
+## label     — extract features and assign rule labels (threshold mode); write per-bucket CSVs
 label:
 	$(VENV)/bin/risk-classifier-label \
 		--manifests-dir $(MANIFESTS) \
 		--data-root $(DATA_ROOT) \
 		--output-dir $(LABELS_ROOT)
+
+## label-llm-anthropic — LLM-assisted labels via Anthropic (claude-sonnet-4-6 by default)
+label-llm-anthropic:
+	$(VENV)/bin/risk-classifier-label \
+		--manifests-dir $(MANIFESTS) \
+		--data-root $(DATA_ROOT) \
+		--output-dir $(LABELS_ROOT) \
+		--labeler-mode llm \
+		--llm-provider anthropic \
+		--llm-model $(LLM_MODEL) \
+		--llm-api-key $(LLM_API_KEY)
+
+## label-llm-gemini — LLM-assisted labels via Google Gemini (gemini-2.0-flash by default)
+label-llm-gemini:
+	$(VENV)/bin/risk-classifier-label \
+		--manifests-dir $(MANIFESTS) \
+		--data-root $(DATA_ROOT) \
+		--output-dir $(LABELS_ROOT) \
+		--labeler-mode llm \
+		--llm-provider gemini \
+		--llm-model $(GEMINI_MODEL) \
+		--llm-api-key $(GEMINI_API_KEY)
 
 ## test     — run the full test suite
 test:

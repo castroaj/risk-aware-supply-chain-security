@@ -1,7 +1,7 @@
 from json import load, dumps
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace, ArgumentTypeError
 import logging
-from typing import Dict, Any, Generator, List, Set, Union
+from typing import Dict, Any, Generator, List, Optional, Set, Union
 from dataclasses import dataclass, fields as _dataclass_fields
 from pathlib import Path
 from pandas import DataFrame, concat
@@ -88,6 +88,32 @@ class SecurityMetric:
 # This is the single source of truth for feature ordering — used by the classifier
 # package to ensure training and prediction use the same feature order.
 FEATURES: List[str] = [f.name for f in _dataclass_fields(SecurityMetric) if f.name != "scan_file"]
+
+
+@dataclass
+class LabelResult:
+    """
+    Structured output from any labeling function (threshold-based or LLM-based).
+
+    WHAT:
+        Wraps the ALLOW/WARN/BLOCK label string with optional justification and
+        confidence fields so that both labeling modes share a single return type.
+
+    WHY:
+        Using a common return type lets load_bucket() call either labeler via the
+        same callable signature without knowing which mode is active. Threshold
+        mode leaves justification and confidence as None; LLM mode populates them.
+
+    Fields:
+        label:         "ALLOW", "WARN", or "BLOCK".
+        justification: Human-readable explanation of the label decision.
+                       None in threshold mode; populated by the LLM in LLM mode.
+        confidence:    "high", "medium", or "low" — LLM self-assessed confidence.
+                       None in threshold mode.
+    """
+    label: str
+    justification: Optional[str] = None
+    confidence: Optional[str] = None
 
 @dataclass
 class SecurityMetricsCollection:
@@ -346,6 +372,70 @@ def classify_metric(metric: SecurityMetric) -> str:
             return "WARN"
     _log.info("classify_metric: ALLOW — all thresholds passed scan_file=%s", metric.scan_file)
     return "ALLOW"
+
+
+def classify_metric_threshold(metric: SecurityMetric) -> LabelResult:
+    """
+    Threshold-based labeler that wraps classify_metric() with the LabelResult interface.
+
+    WHAT:
+        Calls classify_metric() and wraps the string result in a LabelResult with
+        no justification or confidence (those fields are only populated by LLM mode).
+
+    WHY:
+        Provides a uniform Callable[[SecurityMetric], LabelResult] signature so that
+        load_bucket() can accept either this function or classify_metric_llm() without
+        branching on the labeling mode internally.
+
+    Args:
+        metric: Feature vector for one image.
+
+    Returns:
+        LabelResult with label set and justification/confidence as None.
+    """
+    return LabelResult(label=classify_metric(metric))
+
+
+def classify_metric_llm(metric: SecurityMetric, backend: "Any") -> LabelResult:
+    """
+    LLM-based labeler that sends the feature vector to an LLM backend for classification.
+
+    WHAT:
+        Builds a compact JSON user message from the metric, sends it along with the
+        labeling system prompt to the provided backend, and parses the structured
+        JSON response into a LabelResult with label, justification, and confidence.
+
+    WHY:
+        Unlike classify_metric(), this function reasons holistically over all 8 features
+        rather than applying independent threshold checks. The LLM can weigh feature
+        combinations and produce an auditable natural-language justification for each
+        label decision — grounding the Decision Tree's training labels in security
+        reasoning rather than arithmetic.
+
+    WHERE:
+        Delegates prompt construction to llm_labeler.build_user_message() and
+        response parsing to llm_labeler.parse_llm_response(). The API call itself
+        is handled by the backend object (e.g. AnthropicBackend).
+
+    Args:
+        metric:  Feature vector for one image.
+        backend: Any object satisfying the LLMBackend protocol
+                 (has a complete(system: str, user: str) -> str method).
+
+    Returns:
+        LabelResult with label, justification, and confidence populated.
+    """
+    from .llm_labeler import SYSTEM_PROMPT, build_user_message, parse_llm_response
+
+    user_msg = build_user_message(metric)
+    _log.debug("classify_metric_llm: sending request for scan_file=%s", metric.scan_file)
+    raw = backend.complete(SYSTEM_PROMPT, user_msg)
+    result = parse_llm_response(raw)
+    _log.info(
+        "classify_metric_llm: label=%s confidence=%s scan_file=%s",
+        result.label, result.confidence, metric.scan_file,
+    )
+    return result
 
 def build_security_metric_from_sbom(
     scan_file:str,

@@ -24,8 +24,14 @@ CSV format (one row per image):
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
-from .sbom_extractor import build_security_metric_from_sbom, classify_metric, SecurityMetric, FEATURES
+from typing import Callable, Dict, List, Optional
+from .sbom_extractor import (
+    build_security_metric_from_sbom,
+    classify_metric_threshold,
+    LabelResult,
+    SecurityMetric,
+    FEATURES,
+)
 
 import csv
 import json
@@ -55,6 +61,11 @@ REQUIRED_COLUMNS: List[str] = (
     ["scan_file", "image", "bucket", "bucket_label", "rule_label"]
     + FEATURES
 )
+
+# Additional columns written by LLM labeling mode. These are optional — they
+# are only included in the CSV when the labeler produces them (i.e. LLM mode).
+# Threshold mode leaves these absent from the DataFrame entirely.
+LLM_COLUMNS: List[str] = ["justification", "confidence"]
 
 
 def find_sbom_json(
@@ -110,21 +121,24 @@ def write_labels_csv(df: pd.DataFrame, path: Path) -> None:
     Persist a labeled bucket DataFrame to a CSV file for reproducible training.
 
     WHAT:
-        Writes the REQUIRED_COLUMNS subset of the DataFrame to a CSV at `path`.
-        Creates any missing parent directories.
+        Writes REQUIRED_COLUMNS (and any LLM_COLUMNS that are present) to a
+        CSV at `path`. Creates any missing parent directories.
 
     WHY:
         Freezes feature values and rule labels at the time of scanning so that
         subsequent training runs consume identical inputs. Label drift caused by
         threshold changes becomes visible as a diff rather than silently shifting
-        model performance.
+        model performance. LLM columns (justification, confidence) are included
+        when present so that LLM-mode labeling runs persist their reasoning.
 
     Args:
-        df:   DataFrame with at least REQUIRED_COLUMNS columns.
+        df:   DataFrame with at least REQUIRED_COLUMNS columns. May optionally
+              contain LLM_COLUMNS (justification, confidence).
         path: Destination path for the CSV file.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    df[REQUIRED_COLUMNS].to_csv(path, index=False)
+    extra = [c for c in LLM_COLUMNS if c in df.columns]
+    df[REQUIRED_COLUMNS + extra].to_csv(path, index=False)
     _log.info("write_labels_csv: wrote %d records to %s", len(df), path)
 
 
@@ -159,24 +173,24 @@ def load_bucket(
     bucket_name: str,
     data_root: Path,
     labels_csv: Optional[Path] = None,
+    labeler: Optional[Callable[[SecurityMetric], LabelResult]] = None,
 ) -> pd.DataFrame:
     """
     Read one image-list CSV manifest and build a labeled DataFrame for that bucket.
 
     WHAT:
         If `labels_csv` is provided and exists (and contains all REQUIRED_COLUMNS),
-        reads the pre-labeled CSV directly — skipping SBOM JSON parsing and
-        classify_metric() entirely. Otherwise, for each row in the manifest CSV,
-        locates the SBOM JSON file, calls
-        sbom_extractor.build_security_metric_from_sbom() to extract the 8 features,
-        calls sbom_extractor.classify_metric() to obtain the rule-based label, and
-        accumulates results into a DataFrame.
+        reads the pre-labeled CSV directly — skipping SBOM JSON parsing and labeling
+        entirely. Otherwise, for each row in the manifest CSV, locates the SBOM JSON
+        file, calls build_security_metric_from_sbom() to extract the 8 features,
+        then calls the `labeler` function to produce a LabelResult, and accumulates
+        results into a DataFrame.
 
     WHY:
         Pre-labeled CSVs (written by write_labels_csv / risk-classifier-label) freeze
-        feature values and rule labels so training is reproducible across runs.
-        Without them, classify_metric() is re-evaluated on every run and labels
-        can drift if thresholds change between runs.
+        feature values and labels so training is reproducible across runs. The `labeler`
+        parameter decouples labeling mode from data loading — the same function handles
+        both threshold-based and LLM-based labeling without internal branching.
 
     WHERE:
         Reads the manifest CSV and SBOM JSON files from the filesystem.
@@ -191,12 +205,13 @@ def load_bucket(
         labels_csv:   Optional path to a pre-labeled CSV written by write_labels_csv().
                       If the file exists and has the expected columns, it is used
                       directly and SBOM extraction is skipped.
+        labeler:      Callable that accepts a SecurityMetric and returns a LabelResult.
+                      Defaults to classify_metric_threshold() when None.
+                      Pass a lambda wrapping classify_metric_llm() for LLM mode.
 
     Returns:
-        pd.DataFrame with columns: scan_file, image, bucket, bucket_label,
-        rule_label, total_dependency_count, vuln_total, critical_cve_count,
-        high_cve_count, cvss_ge_7_count, max_cvss, unique_cwe_count,
-        top25_cwe_count.
+        pd.DataFrame with REQUIRED_COLUMNS columns, plus justification and confidence
+        columns when the labeler populates them (LLM mode).
     """
     if labels_csv is not None and labels_csv.exists():
         _log.info("load_bucket: reading pre-labeled CSV %s", labels_csv)
@@ -218,6 +233,9 @@ def load_bucket(
             "load_bucket: labels_csv not found at %s — falling back to extraction",
             labels_csv,
         )
+
+    # Default to threshold-based labeling when no labeler is provided.
+    active_labeler = labeler if labeler is not None else classify_metric_threshold
 
     bucket_label = BUCKET_LABEL_MAP[bucket_name]
     records: List[dict] = []
@@ -252,27 +270,39 @@ def load_bucket(
                 _log.warning("load_bucket: feature extraction failed for %s: %s — skipping", json_path, exc)
                 continue
 
-            rule_label = classify_metric(metric)
-            _log.info("load_bucket: image=%s rule_label=%s", image_tag, rule_label)
+            result = active_labeler(metric)
+            _log.info("load_bucket: image=%s rule_label=%s", image_tag, result.label)
 
             try:
                 scan_file_path = json_path.relative_to(Path.cwd())
             except ValueError:
                 scan_file_path = json_path
 
-            records.append(
-                {
-                    "scan_file":    str(scan_file_path),
-                    "image":        image_tag,
-                    "bucket":       bucket_name,
-                    "bucket_label": bucket_label,
-                    "rule_label":   rule_label,
-                    **{f: getattr(metric, f) for f in FEATURES},
-                }
-            )
+            record: dict = {
+                "scan_file":    str(scan_file_path),
+                "image":        image_tag,
+                "bucket":       bucket_name,
+                "bucket_label": bucket_label,
+                "rule_label":   result.label,
+                **{f: getattr(metric, f) for f in FEATURES},
+            }
+
+            # Include LLM columns only when the labeler populates them.
+            if result.justification is not None:
+                record["justification"] = result.justification
+            if result.confidence is not None:
+                record["confidence"] = result.confidence
+
+            records.append(record)
 
     _log.info("load_bucket: bucket='%s' loaded %d records", bucket_name, len(records))
-    return pd.DataFrame(records, columns=REQUIRED_COLUMNS) if records else _empty_dataframe()
+    if not records:
+        return _empty_dataframe()
+    df = pd.DataFrame(records)
+    # Ensure REQUIRED_COLUMNS are always present and in the correct order.
+    # LLM columns trail at the end when present.
+    ordered = REQUIRED_COLUMNS + [c for c in LLM_COLUMNS if c in df.columns]
+    return df[ordered]
 
 
 def load_dataset(
