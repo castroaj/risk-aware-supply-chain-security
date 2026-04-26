@@ -12,7 +12,9 @@ make install        # runs setup.sh, equivalent to: ./setup.sh
 source .venv/bin/activate
 ```
 
-The virtual environment is Python 3.9+ (`.venv/`). Dependencies are declared in `pyproject.toml`. Runtime deps: `pandas`, `scikit-learn`, `joblib`, `numpy`, `matplotlib`, `seaborn`. Dev extras (installed by `setup.sh` / `make install`): `pytest`.
+The virtual environment is Python 3.9+ (`.venv/`). Dependencies are declared in `pyproject.toml`. Runtime deps: `pandas`, `scikit-learn`, `joblib`, `numpy`, `matplotlib`, `seaborn`. Dev extras (installed by `setup.sh` / `make install`): `pytest`. Optional LLM extras:
+- `pip install -e '.[gemini]'` — Google Gemini SDK (`google-genai>=1.0`) — **preferred; used for current labels**
+- `pip install -e '.[llm]'` — Anthropic SDK (`anthropic>=0.25`)
 
 ## Running the SBOM Extractor (standalone CLI)
 
@@ -37,18 +39,40 @@ python src/classifier/sbom_extractor.py -s <path/to/sbom-dir/> -f csv -c
 Three separate entry points are provided — labeling, training, and prediction.
 
 ```bash
-# --- Labeling (run once after scanning, or after threshold changes) ---
+# --- Labeling (run once after scanning, or after threshold/prompt changes) ---
 
-# Extract features and assign rule labels; write per-bucket CSVs to data/scans/
+# Threshold mode (rule-based, default) — writes per-bucket CSVs to data/labels/
 make label
 
 # Or run directly:
 risk-classifier-label \
     --manifests-dir data/image-lists/ \
-    --data-root data/scans/
-# Writes: data/scans/high-qual-labels.csv
-#         data/scans/aged-stale-labels.csv
-#         data/scans/known-vuln-labels.csv
+    --data-root data/scans/ \
+    --output-dir data/labels/
+# Writes: data/labels/high-qual-labels.csv
+#         data/labels/aged-stale-labels.csv
+#         data/labels/known-vuln-labels.csv
+
+# LLM mode — Gemini backend (preferred; requires GEMINI_API_KEY or --llm-api-key)
+# gemini-2.5-flash was used to generate the current data/labels/ CSVs
+make label-llm-gemini
+# Override model or prompt:
+make label-llm-gemini GEMINI_MODEL=gemini-1.5-pro
+make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.txt
+
+# LLM mode — Anthropic backend (requires ANTHROPIC_API_KEY or --llm-api-key)
+make label-llm-anthropic
+make label-llm-anthropic LLM_MODEL=claude-haiku-4-5-20251001
+
+# Or run directly (llm mode, Gemini):
+risk-classifier-label \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/ \
+    --output-dir data/labels/ \
+    --labeler-mode llm \
+    --llm-provider gemini \
+    --llm-model gemini-2.5-flash \
+    --system-prompt config/system-prompt-v1.txt
 
 # --- Training (model developer / data scientist) ---
 
@@ -141,16 +165,18 @@ This is an ML classifier for container image supply chain risk assessment. The p
 - Top 25 CWEs reference the MITRE 2025 list hardcoded in `TOP_25_CWES`
 - `FEATURES` list is the single source of truth for feature ordering across training and prediction
 
-**Stage 3 — Rule-Based Classification** (`src/classifier/sbom_extractor.py`)
-- `BLOCK_THRESHOLDS` and `WARN_THRESHOLDS` define per-feature cutoffs; BLOCK is evaluated before WARN
-- `classify_metric(metric: SecurityMetric) -> str` returns `"BLOCK"`, `"WARN"`, or `"ALLOW"`
-- Used during dataset loading to populate the `rule_label` column that the Decision Tree trains against
+**Stage 3 — Labeling** (`src/classifier/sbom_extractor.py`, `src/classifier/llm_labeler.py`, `src/classifier/backends/`)
+
+Two modes, both return a `LabelResult(label, justification, confidence)`:
+
+- **Threshold mode** (`classify_metric_threshold`) — rule-based via `BLOCK_THRESHOLDS` / `WARN_THRESHOLDS`; fast and fully deterministic. `BLOCK` is evaluated before `WARN`. Legacy `classify_metric()` still exists for backwards compat (returns a plain `str`).
+- **LLM mode** (`classify_metric_llm`) — sends only the 8-feature vector (not raw SBOM content) to an LLM backend. The system prompt is loaded from a versioned file (`config/system-prompt-vN.txt`). Backends live in `src/classifier/backends/`: `GeminiBackend` (preferred) and `AnthropicBackend`. The `llm_labeler.py` module owns prompt loading (`load_system_prompt`), user-message construction (`build_user_message`), and response parsing (`parse_llm_response`) with a safe fallback of `WARN` on any parse failure. **The current `data/labels/` CSVs were generated with `gemini-2.5-flash`.**
 
 **Stage 3b — Label Persistence** (`src/classifier/data_loader.py`, `risk-classifier-label`)
-- `write_labels_csv(df, path)` — persists a labeled bucket DataFrame to CSV so rule labels are frozen at scan time
-- `risk-classifier-label` CLI command writes `{bucket}-labels.csv` per bucket to a configurable output directory
-- Training (`load_bucket`) consumes these CSVs via `--labels-dir` to skip live feature extraction and `classify_metric()` on every run
-- Label drift (caused by threshold changes) becomes a visible `git diff` on the label CSV rather than a silent accuracy drop
+- `write_labels_csv(df, path)` — persists a labeled bucket DataFrame to CSV so labels are frozen at labeling time
+- `risk-classifier-label` CLI command writes `{bucket}-labels.csv` per bucket to `--output-dir` (default: `data/labels/`)
+- Training (`load_bucket`) consumes these CSVs via `--labels-dir` to skip live feature extraction and labeling on every run
+- Label drift (threshold changes, prompt changes) becomes a visible `git diff` on the label CSV rather than a silent accuracy drop
 
 **Stage 4 — ML Training and Prediction** (`src/classifier/`)
 - `data_loader.py` — reads bucket manifests, optionally reads pre-labeled CSVs, calls the extractor for each SBOM, builds a labeled DataFrame
@@ -162,13 +188,22 @@ This is an ML classifier for container image supply chain risk assessment. The p
 
 ```
 pyproject.toml               # Build configuration, dependencies, and three console script entry points
-Makefile                     # install / label / test / train / build / clean targets
+                             # Optional extras: [llm] = anthropic, [gemini] = google-genai
+Makefile                     # install / label / label-llm-anthropic / label-llm-gemini / test / train / build / clean targets
+config/
+  system-prompt-v1.txt       # Versioned LLM labeling system prompt (used by llm mode)
 src/
   classifier/
     __init__.py              # Public API: Trainer, Predictor, TrainingConfig, TrainingResult,
                              #             SecurityMetric, FEATURES, classify_metric,
                              #             build_security_metric_from_sbom
-    sbom_extractor.py        # Feature extraction, SecurityMetric dataclass, rule-based classifier
+    sbom_extractor.py        # Feature extraction, SecurityMetric/LabelResult dataclasses,
+                             # classify_metric_threshold(), classify_metric_llm()
+    llm_labeler.py           # load_system_prompt(), build_user_message(), parse_llm_response()
+    backends/
+      __init__.py
+      anthropic_backend.py   # AnthropicBackend — wraps anthropic SDK
+      gemini_backend.py      # GeminiBackend — wraps google-genai SDK
     data_loader.py           # Dataset loading from bucket manifests
     trainer.py               # TrainingConfig, TrainingResult, Trainer, visualization and reporting functions
     predictor.py             # ML inference from saved artifacts

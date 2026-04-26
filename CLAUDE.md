@@ -53,10 +53,27 @@ python src/classifier/sbom_extractor.py -s data/scans/high-qual/ -f csv -c
 ./scripts/scan_all.sh data/scans/
 ./scripts/scan_all.sh -p data/scans/
 
-# Label — extract features and assign rule labels; write per-bucket CSVs to data/labels/
+# Label — rule-based (threshold mode, default); write per-bucket CSVs to data/labels/
 risk-classifier-label \
     --manifests-dir data/image-lists/ \
-    --data-root data/scans/
+    --data-root data/scans/ \
+    --output-dir data/labels/
+
+# Label — LLM-assisted (Gemini, preferred); requires GEMINI_API_KEY env var
+# gemini-2.5-flash was used to generate the current data/labels/ CSVs
+risk-classifier-label \
+    --manifests-dir data/image-lists/ \
+    --data-root data/scans/ \
+    --output-dir data/labels/ \
+    --labeler-mode llm \
+    --llm-provider gemini \
+    --llm-model gemini-2.5-flash \
+    --system-prompt config/system-prompt-v1.txt
+
+# Or use Makefile shorthands:
+make label                  # threshold mode
+make label-llm-gemini       # LLM mode via Gemini (requires GEMINI_API_KEY) — preferred
+make label-llm-anthropic    # LLM mode via Anthropic (requires ANTHROPIC_API_KEY)
 
 # Train the Decision Tree from pre-labeled CSVs
 risk-classifier-train \
@@ -111,7 +128,11 @@ The classifier operates on **structured feature vectors** extracted from tool ou
 - `total_dependency_count`, `vuln_total`, `critical_cve_count`, `high_cve_count`, `cvss_ge_7_count`, `max_cvss`, `unique_cwe_count`, `top25_cwe_count`
 - SAST features (`semgrep_total`, `semgrep_high_count`) are deferred from the current scope; see `research/ML_model/semgrep-feature-analysis.md` for rationale
 
-**Classification** is rule-based (`BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` in `src/classifier/sbom_extractor.py`) for labeling, and Decision Tree (`DecisionTreeClassifier`) for ML training. Labels are frozen at scan time in `data/labels/` CSVs so threshold changes or Docker Hub API non-determinism produce a visible `git diff` rather than a silent accuracy drop. Threshold rationale is in `ml-classifier/analysis/dataset-statistics.md`.
+**Labeling** supports two modes:
+- **Threshold mode** (default) — rule-based `ALLOW`/`WARN`/`BLOCK` via `BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` in `sbom_extractor.py`. Fast and deterministic.
+- **LLM mode** — holistic labeling via an LLM backend (Gemini preferred; Anthropic also supported). The model receives only the 8-feature vector (never raw SBOM content) plus a versioned system prompt from `config/system-prompt-vN.txt`. Returns a `LabelResult` with `label`, `justification`, and `confidence`. **The current `data/labels/` CSVs were generated with `gemini-2.5-flash`.** Install optional extras: `pip install 'risk-classifier[gemini]'` (Gemini) or `pip install 'risk-classifier[llm]'` (Anthropic).
+
+Labels are frozen at scan time in `data/labels/` CSVs so threshold changes, prompt changes, or Docker Hub API non-determinism produce a visible `git diff` rather than a silent accuracy drop. Threshold rationale is in `ml-classifier/analysis/dataset-statistics.md`.
 
 ## Key Design Decisions
 
