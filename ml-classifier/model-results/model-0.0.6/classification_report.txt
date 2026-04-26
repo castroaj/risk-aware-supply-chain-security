@@ -1,0 +1,68 @@
+Risk-Aware Supply Chain Security — Decision Tree Classifier
+============================================================
+
+Dataset size       : 371 images
+Train / Test split : 296 / 75
+Class distribution : ALLOW=21, BLOCK=250, WARN=100
+
+Hyperparameters:
+  criterion         : gini
+  max_depth         : 4
+  min_samples_split : 4
+  min_samples_leaf  : 2
+  class_weight      : {'ALLOW': 4, 'WARN': 2, 'BLOCK': 3}
+  random_state      : 42
+  test_size         : 0.20
+  cv_folds          : 5
+
+Test Accuracy      : 0.9067
+CV Accuracy        : 0.9119 ± 0.0422 (5-fold stratified)
+
+Escalation Policy:
+  WARN confidence threshold : 0.75
+  WARNs escalated to BLOCK  : 0 (test set)
+  BLOCK predictions         : never downgraded
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       ALLOW       1.00      1.00      1.00         4
+       BLOCK       0.91      0.96      0.93        51
+        WARN       0.88      0.75      0.81        20
+
+    accuracy                           0.91        75
+   macro avg       0.93      0.90      0.91        75
+weighted avg       0.91      0.91      0.90        75
+
+Decision Tree Rules:
+|--- critical_cve_count <= 2.50
+|   |--- cvss_ge_7_count <= 0.50
+|   |   |--- class: 0
+|   |--- cvss_ge_7_count >  0.50
+|   |   |--- high_cve_count <= 10.50
+|   |   |   |--- class: 2
+|   |   |--- high_cve_count >  10.50
+|   |   |   |--- total_dependency_count <= 36.00
+|   |   |   |   |--- class: 1
+|   |   |   |--- total_dependency_count >  36.00
+|   |   |   |   |--- class: 2
+|--- critical_cve_count >  2.50
+|   |--- top25_cwe_count <= 25.50
+|   |   |--- total_dependency_count <= 92.00
+|   |   |   |--- class: 1
+|   |   |--- total_dependency_count >  92.00
+|   |   |   |--- unique_cwe_count <= 26.00
+|   |   |   |   |--- class: 1
+|   |   |   |--- unique_cwe_count >  26.00
+|   |   |   |   |--- class: 2
+|   |--- top25_cwe_count >  25.50
+|   |   |--- total_dependency_count <= 1476.00
+|   |   |   |--- cvss_ge_7_count <= 58.50
+|   |   |   |   |--- class: 1
+|   |   |   |--- cvss_ge_7_count >  58.50
+|   |   |   |   |--- class: 1
+|   |   |--- total_dependency_count >  1476.00
+|   |   |   |--- top25_cwe_count <= 96.50
+|   |   |   |   |--- class: 2
+|   |   |   |--- top25_cwe_count >  96.50
+|   |   |   |   |--- class: 1

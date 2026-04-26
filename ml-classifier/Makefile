@@ -11,9 +11,9 @@ OUTPUT_DIR   := $(RUNS_DIR)/$(TIMESTAMP)
 
 # Hyper-params
 MAX_DEPTH := 4
-MIN_SAMPLES_SPLIT := 6
+MIN_SAMPLES_SPLIT := 4
 MIN_SAMPLES_LEAF := 2
-CLASS_WEIGHT := '{"ALLOW":1, "WARN":1, "BLOCK":1}'
+CLASS_WEIGHT := '{"ALLOW":4, "WARN":2, "BLOCK":3}'
 
 # LLM labeling — set via environment or make argument.
 #
