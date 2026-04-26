@@ -23,7 +23,7 @@ System prompt versioning:
 Token budget per image (approximate):
     System prompt : ~600 tokens
     User message  : ~80–120 tokens
-    Response      : ~150–200 tokens
+    Response      : ~200–300 tokens
     -----------------------------------------------
     Total per call: ~750 in / ~175 out
 """
@@ -44,7 +44,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # Path to the latest versioned system prompt file.
 # Update this constant when a new prompt version is added to config/.
-DEFAULT_SYSTEM_PROMPT_PATH: Path = _PROJECT_ROOT / "config" / "system-prompt-v1.txt"
+DEFAULT_SYSTEM_PROMPT_PATH: Path = _PROJECT_ROOT / "config" / "system-prompt-v2.md"
 
 
 def load_system_prompt(path: Path = DEFAULT_SYSTEM_PROMPT_PATH) -> str:
@@ -59,7 +59,7 @@ def load_system_prompt(path: Path = DEFAULT_SYSTEM_PROMPT_PATH) -> str:
     WHY:
         Externalizing the prompt to a file means changes are visible as a
         plain-text git diff rather than buried in Python source. The versioned
-        filename (system-prompt-v1.txt, v2.txt, ...) makes it explicit when
+        filename (system-prompt-v1.md, v2.md, ...) makes it explicit when
         the labeling rubric has changed and a re-labeling run is required.
 
     Args:
@@ -72,7 +72,7 @@ def load_system_prompt(path: Path = DEFAULT_SYSTEM_PROMPT_PATH) -> str:
     if not path.exists():
         raise FileNotFoundError(
             f"System prompt file not found: {path}\n"
-            "Ensure config/system-prompt-vN.txt exists or pass a valid --system-prompt path."
+            "Ensure config/system-prompt-vN.md exists or pass a valid --system-prompt path."
         )
     text = path.read_text(encoding="utf-8").rstrip()
     _log.debug("load_system_prompt: loaded %d chars from %s", len(text), path)

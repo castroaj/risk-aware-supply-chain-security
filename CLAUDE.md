@@ -68,7 +68,7 @@ risk-classifier-label \
     --labeler-mode llm \
     --llm-provider gemini \
     --llm-model gemini-2.5-flash \
-    --system-prompt config/system-prompt-v1.txt
+    --system-prompt config/system-prompt-v2.md
 
 # Or use Makefile shorthands:
 make label                  # threshold mode

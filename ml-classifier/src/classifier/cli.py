@@ -526,7 +526,7 @@ def _parse_label_args() -> Namespace:
         default=None,
         metavar="FILE",
         help=(
-            "Path to a versioned system prompt file (e.g. config/system-prompt-v1.txt). "
+            "Path to a versioned system prompt file (e.g. config/system-prompt-v2.md). "
             "Defaults to the latest version in config/. "
             "Only used when --labeler-mode=llm."
         ),

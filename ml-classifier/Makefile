@@ -10,28 +10,29 @@ TIMESTAMP    := $(shell date +%Y%m%d-%H%M%S)
 OUTPUT_DIR   := $(RUNS_DIR)/$(TIMESTAMP)
 
 # Hyper-params
+MAX_DEPTH := 4
 MIN_SAMPLES_SPLIT := 6
 MIN_SAMPLES_LEAF := 2
-CLASS_WEIGHT := '{"ALLOW":1, "WARN":2,"BLOCK":4}'
+CLASS_WEIGHT := '{"ALLOW":1, "WARN":1, "BLOCK":1}'
 
 # LLM labeling — set via environment or make argument.
 #
 # Anthropic (default):
 #   make label-llm-anthropic
 #   make label-llm-anthropic LLM_MODEL=claude-haiku-4-5-20251001
-#   make label-llm-anthropic SYSTEM_PROMPT=config/system-prompt-v2.txt
+#   make label-llm-anthropic SYSTEM_PROMPT=config/system-prompt-v2.md
 #   ANTHROPIC_API_KEY=sk-ant-... make label-llm-anthropic
 #
 # Gemini:
 #   make label-llm-gemini
 #   make label-llm-gemini GEMINI_MODEL=gemini-2.5-flash
-#   make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.txt
+#   make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.md
 #   GEMINI_API_KEY=AIza... make label-llm-gemini
 LLM_MODEL            ?= claude-sonnet-4-6
 LLM_API_KEY          ?= $(ANTHROPIC_API_KEY)
 GEMINI_MODEL         ?= gemini-2.5-flash
 GEMINI_API_KEY       ?= $(GEMINI_API_KEY)
-SYSTEM_PROMPT        ?= config/system-prompt-v1.txt
+SYSTEM_PROMPT        ?= config/system-prompt-v2.md
 
 .PHONY: install label label-llm-anthropic label-llm-gemini test train clean build
 
@@ -80,6 +81,7 @@ train:
 	$(VENV)/bin/risk-classifier-train \
 		--labels-dir $(LABELS_ROOT) \
 		--output-dir $(OUTPUT_DIR) \
+		--max-depth $(MAX_DEPTH) \
 		--min-samples-split $(MIN_SAMPLES_SPLIT) \
 		--min-samples-leaf $(MIN_SAMPLES_LEAF) \
 		--class-weight $(CLASS_WEIGHT)

@@ -58,7 +58,7 @@ risk-classifier-label \
 make label-llm-gemini
 # Override model or prompt:
 make label-llm-gemini GEMINI_MODEL=gemini-1.5-pro
-make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.txt
+make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.md
 
 # LLM mode — Anthropic backend (requires ANTHROPIC_API_KEY or --llm-api-key)
 make label-llm-anthropic
@@ -72,7 +72,7 @@ risk-classifier-label \
     --labeler-mode llm \
     --llm-provider gemini \
     --llm-model gemini-2.5-flash \
-    --system-prompt config/system-prompt-v1.txt
+    --system-prompt config/system-prompt-v2.md
 
 # --- Training (model developer / data scientist) ---
 
@@ -191,7 +191,7 @@ pyproject.toml               # Build configuration, dependencies, and three cons
                              # Optional extras: [llm] = anthropic, [gemini] = google-genai
 Makefile                     # install / label / label-llm-anthropic / label-llm-gemini / test / train / build / clean targets
 config/
-  system-prompt-v1.txt       # Versioned LLM labeling system prompt (used by llm mode)
+  system-prompt-v1.md       # Versioned LLM labeling system prompt (used by llm mode)
 src/
   classifier/
     __init__.py              # Public API: Trainer, Predictor, TrainingConfig, TrainingResult,

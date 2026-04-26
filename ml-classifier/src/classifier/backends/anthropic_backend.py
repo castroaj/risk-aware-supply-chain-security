@@ -36,12 +36,12 @@ class AnthropicBackend:
         model:      Model identifier string, e.g. "claude-sonnet-4-6" or
                     "claude-haiku-4-5-20251001". Prefer the most capable model
                     available for security-critical labeling.
-        max_tokens: Maximum tokens to generate in the response. 512 is
-                    sufficient for the structured JSON label output defined
-                    in the system prompt. Raise only if justifications truncate.
+        max_tokens: Maximum tokens to generate in the response. 3072 provides
+                    sufficient headroom for the structured JSON label output and
+                    up to 90-word justifications defined in the system prompt.
     """
 
-    def __init__(self, api_key: str, model: str, max_tokens: int = 2048) -> None:
+    def __init__(self, api_key: str, model: str, max_tokens: int = 3072) -> None:
         try:
             import anthropic
         except ImportError as exc:

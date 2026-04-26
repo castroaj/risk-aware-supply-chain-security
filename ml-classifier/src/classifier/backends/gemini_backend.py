@@ -38,12 +38,12 @@ class GeminiBackend:
         model:      Model identifier string, e.g. "gemini-2.0-flash" or
                     "gemini-1.5-pro". Gemini 2.0 Flash is recommended for
                     cost-efficient labeling runs.
-        max_tokens: Maximum tokens to generate in the response. 512 is
-                    sufficient for the structured JSON label output defined
-                    in the system prompt.
+        max_tokens: Maximum tokens to generate in the response. 3072 provides
+                    sufficient headroom for the structured JSON label output and
+                    up to 90-word justifications defined in the system prompt.
     """
 
-    def __init__(self, api_key: str, model: str, max_tokens: int = 2048) -> None:
+    def __init__(self, api_key: str, model: str, max_tokens: int = 3072) -> None:
         try:
             from google import genai
             from google.genai import types as genai_types
