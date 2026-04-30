@@ -13,26 +13,27 @@ OUTPUT_DIR   := $(RUNS_DIR)/$(TIMESTAMP)
 MAX_DEPTH := 4
 MIN_SAMPLES_SPLIT := 4
 MIN_SAMPLES_LEAF := 2
-CLASS_WEIGHT := '{"ALLOW":4, "WARN":2, "BLOCK":3}'
+CLASS_WEIGHT := '{"ALLOW":4, "WARN":2, "BLOCK":2}'
+TEST_SIZE := 0.2
 
 # LLM labeling — set via environment or make argument.
 #
 # Anthropic (default):
 #   make label-llm-anthropic
 #   make label-llm-anthropic LLM_MODEL=claude-haiku-4-5-20251001
-#   make label-llm-anthropic SYSTEM_PROMPT=config/system-prompt-v2.md
+#   make label-llm-anthropic SYSTEM_PROMPT=config/system-prompt-v3.md
 #   ANTHROPIC_API_KEY=sk-ant-... make label-llm-anthropic
 #
 # Gemini:
 #   make label-llm-gemini
 #   make label-llm-gemini GEMINI_MODEL=gemini-2.5-flash
-#   make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.md
+#   make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v3.md
 #   GEMINI_API_KEY=AIza... make label-llm-gemini
 LLM_MODEL            ?= claude-sonnet-4-6
 LLM_API_KEY          ?= $(ANTHROPIC_API_KEY)
 GEMINI_MODEL         ?= gemini-2.5-flash
 GEMINI_API_KEY       ?= $(GEMINI_API_KEY)
-SYSTEM_PROMPT        ?= config/system-prompt-v2.md
+SYSTEM_PROMPT        ?= config/system-prompt-v3.md
 
 .PHONY: install label label-llm-anthropic label-llm-gemini test train clean build
 
@@ -84,7 +85,8 @@ train:
 		--max-depth $(MAX_DEPTH) \
 		--min-samples-split $(MIN_SAMPLES_SPLIT) \
 		--min-samples-leaf $(MIN_SAMPLES_LEAF) \
-		--class-weight $(CLASS_WEIGHT)
+		--class-weight $(CLASS_WEIGHT) \
+		--test-size $(TEST_SIZE)
 
 ## build    — build a source distribution and wheel into dist/
 build:

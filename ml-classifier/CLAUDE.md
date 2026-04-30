@@ -58,7 +58,7 @@ risk-classifier-label \
 make label-llm-gemini
 # Override model or prompt:
 make label-llm-gemini GEMINI_MODEL=gemini-1.5-pro
-make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v2.md
+make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v3.md
 
 # LLM mode — Anthropic backend (requires ANTHROPIC_API_KEY or --llm-api-key)
 make label-llm-anthropic
@@ -72,7 +72,7 @@ risk-classifier-label \
     --labeler-mode llm \
     --llm-provider gemini \
     --llm-model gemini-2.5-flash \
-    --system-prompt config/system-prompt-v2.md
+    --system-prompt config/system-prompt-v3.md
 
 # --- Training (model developer / data scientist) ---
 

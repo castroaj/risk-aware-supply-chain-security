@@ -1,7 +1,7 @@
 # Training Run Cross-Comparison
 
-**Last updated:** 2026-04-26
-**Current model:** `model-0.0.6` (LLM v2 labels, `gemini-2.5-flash`, `system-prompt-v2.md`)
+**Last updated:** 2026-04-30
+**Current model:** `model-0.0.7` (LLM v3 labels, `gemini-2.5-flash`, `system-prompt-v3.md`)
 
 ---
 
@@ -12,7 +12,8 @@
 | v0.0.3 | Threshold | 371 | 136 | 112 | 123 | 93.33% | 97.29% ±2.30% |
 | v0.0.4 | Threshold | 371 | 144 | 104 | 123 | **97.33%** | 96.96% ±1.97% |
 | v0.0.5 | LLM v1 (`system-prompt-v1.md`) | 371 | 21 | 23 | 327 | 100.00% ⚠️ | 99.33% ±0.82% |
-| **v0.0.6** | **LLM v2 (`system-prompt-v2.md`)** | **371** | **21** | **100** | **250** | **90.67%** | **91.19% ±4.22%** |
+| v0.0.6 | LLM v2 (`system-prompt-v2.md`) | 371 | 21 | 100 | 250 | 90.67% | 91.19% ±4.22% |
+| **v0.0.7** | **LLM v3 (`system-prompt-v3.md`)** | **371** | **21** | **164** | **186** | **92.00%** | **92.21% ±4.76%** |
 
 ---
 
@@ -32,7 +33,7 @@ For a detailed root-cause analysis of the v1 prompt defects, see `analysis/llm-l
 
 ---
 
-### Why v0.0.6 Is the Current Model of Choice
+### Why v0.0.6 Was the Model of Choice (superseded by v0.0.7)
 
 v0.0.6 was trained on labels regenerated with `system-prompt-v2.md`. The v2 prompt addressed the five root causes identified in the v1 evaluation: it introduced vulnerability density as the primary evaluation lens, replaced vague qualifiers with concrete numeric anchors (e.g., `critical_cve_count ≥ 5` for BLOCK), expanded WARN to capture isolated critical CVEs in large images, and added explicit operational framing so the LLM understands that over-BLOCKing is a failure mode.
 
@@ -65,7 +66,33 @@ For a deployment gate, the operationally most important class is WARN — it is 
 - WARN precision: 0.88 — 12% of WARN predictions are false positives (would be BLOCK), a controlled over-caution
 - WARN recall: 0.75 — 25% of true WARNs are missed and fall through to BLOCK, triggering escalation instead of sprint-cycle remediation
 
-The WARN recall of 0.75 is the primary area for further improvement. It is not a safety regression — missed WARNs escalate to BLOCK, not ALLOW — but it increases operational friction. Increasing dataset size in the WARN range (images with 1–4 isolated critical CVEs in large images) would tighten the WARN/BLOCK boundary.
+The WARN recall of 0.75 was the primary area for further improvement. It is not a safety regression — missed WARNs escalate to BLOCK, not ALLOW — but it increases operational friction. v0.0.7 directly addresses this.
+
+---
+
+### Why v0.0.7 Is the Current Model of Choice
+
+v0.0.7 was trained on labels regenerated with `system-prompt-v3.md`. The v3 prompt addressed the two P0/P1 issues identified in v0.0.6: the WARN/BLOCK boundary example gap and the absence of density encoding in the BLOCK criteria.
+
+The key mechanism is a density ratio (`top25_cwe_count / total_dependency_count`) as the primary BLOCK signal, replacing the absolute count anchors in v2. A ratio ≥ 1.0 indicates systemic compromise (BLOCK); below 0.3 suggests concentrated but not systemic risk (WARN). This change caused a significant redistribution: BLOCK dropped from 250 to 186 and WARN grew from 100 to 164 — images that were incorrectly promoted to BLOCK under v2's absolute-count rules are now correctly labeled WARN.
+
+The result is a more balanced and operationally representative label distribution: 50% BLOCK, 44% WARN, 6% ALLOW.
+
+#### Hyperparameter Changes: v0.0.6 → v0.0.7
+
+| Parameter | v0.0.6 | v0.0.7 | Rationale |
+|-----------|--------|--------|-----------|
+| `class_weight` | `{ALLOW:4, WARN:2, BLOCK:3}` | `{ALLOW:4, WARN:2, BLOCK:2}` | BLOCK is no longer over-represented (50% vs. 67% in v0.0.6); reducing its weight avoids over-boosting the majority class |
+| `test_size` | `0.5` (Makefile) | `0.2` | Standard 80/20 split produces a larger training set (296 vs. 185), which improves fit on the expanded WARN class |
+
+#### Security Posture: WARN Performance
+
+For a deployment gate, WARN is the operationally most important class — it is the signal that drives sprint-cycle remediation rather than emergency escalation. In v0.0.7:
+
+- WARN precision: 0.91 — 9% of WARN predictions are false positives (would be BLOCK), slightly improved over v0.0.6 (0.88)
+- WARN recall: 0.91 — only 9% of true WARNs are missed, up sharply from v0.0.75 in v0.0.6
+
+The improvement from 0.75 to 0.91 WARN recall is the primary gain of v0.0.7. Fewer correct WARN images are escalated to BLOCK, reducing operational friction without any safety regression (missed WARNs still escalate to BLOCK, not ALLOW).
 
 ---
 

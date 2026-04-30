@@ -2,6 +2,8 @@
 
 After v2 LLM labels were generated and model v0.0.6 was trained, the final label distribution across 371 images was: **ALLOW=21 (6%), WARN=100 (27%), BLOCK=250 (67%)**.
 
+After v3 LLM labels were generated and model v0.0.7 was trained, the distribution shifted to: **ALLOW=21 (6%), WARN=164 (44%), BLOCK=186 (50%)**.
+
 The expectation going in was ~50–65% ALLOW for the high-qual bucket. The initial reaction was to treat the shortfall as a prompt calibration problem. That was the wrong interpretation.
 
 ---
@@ -61,10 +63,25 @@ ALLOW should be rare and should mean something. A classifier that outputs ALLOW 
 
 ## Implications
 
-**WARN is the correct normal outcome.** For most production images, WARN — deploy with a documented sprint-cycle fix window — is the operationally appropriate response. A gate that ALLOWs 6%, WARNs 27%, and BLOCKs 67% is functioning as a strict security gate. One that ALLOWs 39% is a rubber stamp.
+**WARN is the correct normal outcome.** For most production images, WARN — deploy with a documented sprint-cycle fix window — is the operationally appropriate response. A gate that ALLOWs 6%, WARNs 44%, and BLOCKs 50% (v0.0.7) is functioning as a strict but actionable security gate. One that ALLOWs 39% is a rubber stamp.
 
 **Buckets are valid for data sourcing, not for label expectations.** The high-qual/aged-stale/known-vuln split is a useful heuristic for collecting a dataset that spans the risk spectrum. It was never a valid prior on what fraction of each bucket should receive a given label. Future dataset expansions should source images from all three buckets without any expected label distribution.
 
-**Calibration means feature-value consistency, not bucket-distribution matching.** The correct check for a future prompt version is whether the LLM's justifications are logically consistent with the feature values in each labeled row — not whether the distribution aligns with bucket identity.
+**Calibration means feature-value consistency, not bucket-distribution matching.** The correct check for a prompt version is whether the LLM's justifications are logically consistent with the feature values in each labeled row — not whether the distribution aligns with bucket identity.
 
-**The v2 BLOCK anchors carry a residual density problem.** Criteria like `critical_cve_count ≥ 2 AND max_cvss = 10.0` do not encode image size, so a 400-dependency image with 2 isolated critical CVEs fires identically to a 5-dependency image with the same profile — very different risk densities, same outcome. A future v3 prompt should make density structural by passing `critical_cve_count / total_dependency_count` as an explicit value in the user message, with thresholds anchored on that rate rather than on raw counts.
+**The v2 density problem was resolved in v3.** v2 BLOCK criteria like `critical_cve_count ≥ 2 AND max_cvss = 10.0` did not encode image size, causing a 400-dependency image with 2 isolated critical CVEs to be labeled identically to a 5-dependency image with the same profile. v3 replaced these with a density ratio (`top25_cwe_count / total_dependency_count`) as the primary BLOCK signal: ratio ≥ 1.0 indicates systemic compromise; below 0.3, risk is concentrated rather than systemic. This single change redistributed 64 images from BLOCK to WARN across all three buckets and raised WARN recall from 0.75 to 0.91.
+
+---
+
+## v2 → v3 Label Distribution Shift
+
+| Bucket | v2 ALLOW | v3 ALLOW | v2 WARN | v3 WARN | v2 BLOCK | v3 BLOCK |
+|---|---|---|---|---|---|---|
+| `high-qual` (172) | 12 (7%) | 12 (7%) | 89 (52%) | 122 (71%) | 71 (41%) | 38 (22%) |
+| `aged-stale` (154) | 8 (5%) | 8 (5%) | 7 (5%) | 32 (21%) | 139 (90%) | 114 (74%) |
+| `known-vuln` (45) | 1 (2%) | 1 (2%) | 4 (9%) | 10 (22%) | 40 (89%) | 34 (76%) |
+| **Total (371)** | **21 (6%)** | **21 (6%)** | **100 (27%)** | **164 (44%)** | **250 (67%)** | **186 (50%)** |
+
+ALLOW is unchanged — the truly clean images were already correctly labeled under v2. All of the redistribution is BLOCK → WARN: the density framing correctly identified that images with concentrated but not systemic vulnerability profiles were being over-escalated.
+
+The `aged-stale` bucket remains predominantly BLOCK (74%) because the images sourced for it (nginx 1.18–1.22, Ubuntu 16.04/18.04, Python 3.6–3.9 EOL) carry 30–46 critical CVEs at near-systemic density. The prompt cannot fix a data sourcing problem. Replacing a significant portion of `aged-stale` with 1–2 year old moderate-CVE images is the next highest-leverage change.

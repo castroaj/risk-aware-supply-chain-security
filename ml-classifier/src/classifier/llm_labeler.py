@@ -44,7 +44,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 # Path to the latest versioned system prompt file.
 # Update this constant when a new prompt version is added to config/.
-DEFAULT_SYSTEM_PROMPT_PATH: Path = _PROJECT_ROOT / "config" / "system-prompt-v2.md"
+DEFAULT_SYSTEM_PROMPT_PATH: Path = _PROJECT_ROOT / "config" / "system-prompt-v3.md"
 
 
 def load_system_prompt(path: Path = DEFAULT_SYSTEM_PROMPT_PATH) -> str:

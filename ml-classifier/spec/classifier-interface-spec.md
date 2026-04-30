@@ -58,7 +58,7 @@ Two modes are supported via the `--labeler-mode` flag on `risk-classifier-label`
 | Threshold | `--labeler-mode threshold` | `classify_metric_threshold()` — rule-based via `BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` | Yes | No |
 | LLM | `--labeler-mode llm` | LLM backend (Gemini or Anthropic) + versioned system prompt | Near-deterministic (temperature=0) | **Yes** |
 
-**LLM mode is the current default** and was used to generate the `data/labels/` CSVs that all model versions from v0.0.5 onward were trained on. `gemini-2.5-flash` + `config/system-prompt-v2.md` is the active configuration.
+**LLM mode is the current default** and was used to generate the `data/labels/` CSVs that all model versions from v0.0.5 onward were trained on. `gemini-2.5-flash` + `config/system-prompt-v3.md` is the active configuration.
 
 ### 3.2 LLM labeling
 
@@ -71,7 +71,7 @@ Both backends use `temperature=0`. Parse failures fall back to `WARN` with `conf
 
 The system prompt at `config/system-prompt-vN.md` plays the role that `BLOCK_THRESHOLDS` / `WARN_THRESHOLDS` play in threshold mode. It must be treated as immutable for a given model version. Changes to the prompt trigger a full re-labeling run and a new model version.
 
-For system prompt evolution history (v1 → v2), see `analysis/llm-labeling-proposal.md`.
+For system prompt evolution history (v1 → v2 → v3), see `analysis/llm-labeling-proposal.md`.
 
 ### 3.3 Label CSV schema
 
@@ -249,8 +249,8 @@ risk-classifier-label --manifests-dir DIR --data-root DIR --output-dir DIR [opti
 **Makefile shorthands:**
 ```bash
 make label                  # threshold mode
-make label-llm-gemini       # LLM mode, gemini-2.5-flash + system-prompt-v2.md (preferred)
-make label-llm-anthropic    # LLM mode, claude-sonnet-4-6 + system-prompt-v2.md
+make label-llm-gemini       # LLM mode, gemini-2.5-flash + system-prompt-v3.md (preferred)
+make label-llm-anthropic    # LLM mode, claude-sonnet-4-6 + system-prompt-v3.md
 ```
 
 ### 6.2 `risk-classifier-train`
