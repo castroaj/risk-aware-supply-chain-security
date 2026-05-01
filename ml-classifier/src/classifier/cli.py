@@ -442,14 +442,19 @@ def _parse_label_args() -> Namespace:
     Parse arguments for the risk-classifier-label entry point.
 
     Returns:
-        Parsed Namespace with manifests_dir, data_root, output_dir, and logging fields.
+        Parsed Namespace with manifests_dir, data_root, output_dir, labeler_mode,
+        llm_model, llm_api_key, and logging fields.
     """
     parser = ArgumentParser(
         prog="risk-classifier-label",
         description=(
-            "Risk-Aware Supply Chain Security — Extract features and assign rule labels "
+            "Risk-Aware Supply Chain Security — Extract features and assign labels "
             "from SBOM scan data. Writes one <bucket>-labels.csv per bucket to --output-dir "
-            "so that subsequent training runs consume frozen, reproducible labels."
+            "so that subsequent training runs consume frozen, reproducible labels.\n\n"
+            "Two labeling modes are supported:\n"
+            "  threshold  (default) — rule-based ALLOW/WARN/BLOCK via fixed thresholds.\n"
+            "  llm        — holistic LLM-based labeling with justification and confidence.\n"
+            "               Requires --llm-model and --llm-api-key (or ANTHROPIC_API_KEY env var)."
         ),
         formatter_class=ArgumentDefaultsHelpFormatter,
     )
@@ -474,18 +479,150 @@ def _parse_label_args() -> Namespace:
         metavar="DIR",
         help="Directory to write per-bucket label CSVs (default: same as --data-root).",
     )
+    parser.add_argument(
+        "--labeler-mode",
+        choices=["threshold", "llm"],
+        default="threshold",
+        metavar="MODE",
+        help="Labeling mode: 'threshold' (rule-based, default) or 'llm' (LLM-assisted).",
+    )
+    parser.add_argument(
+        "--llm-provider",
+        choices=["anthropic", "gemini"],
+        default="anthropic",
+        metavar="PROVIDER",
+        help=(
+            "LLM provider backend to use in llm mode: 'anthropic' (default) or 'gemini'. "
+            "Each provider requires its own optional extra: "
+            "pip install 'risk-classifier[llm]' for Anthropic, "
+            "pip install 'risk-classifier[gemini]' for Gemini."
+        ),
+    )
+    parser.add_argument(
+        "--llm-model",
+        default=None,
+        metavar="MODEL",
+        help=(
+            "LLM model identifier to use in llm mode. "
+            "Anthropic examples: 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'. "
+            "Gemini examples: 'gemini-2.0-flash', 'gemini-1.5-pro'. "
+            "Required when --labeler-mode=llm."
+        ),
+    )
+    parser.add_argument(
+        "--llm-api-key",
+        default=None,
+        metavar="KEY",
+        help=(
+            "API key for the LLM provider. "
+            "May also be set via environment variables: "
+            "ANTHROPIC_API_KEY (Anthropic) or GEMINI_API_KEY (Gemini). "
+            "Required when --labeler-mode=llm."
+        ),
+    )
+    parser.add_argument(
+        "--system-prompt",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to a versioned system prompt file (e.g. config/system-prompt-v3.md). "
+            "Defaults to the latest version in config/. "
+            "Only used when --labeler-mode=llm."
+        ),
+    )
     _add_logging_args(parser)
     return parser.parse_args()
+
+
+def _build_labeler(args: Namespace):
+    """
+    Construct the labeler callable based on the parsed --labeler-mode argument.
+
+    WHAT:
+        Returns a Callable[[SecurityMetric], LabelResult] appropriate for the
+        requested mode. In threshold mode, returns classify_metric_threshold
+        directly. In llm mode, resolves the API key, instantiates an
+        AnthropicBackend, and returns a partial that captures the backend.
+
+    WHY:
+        Isolating backend construction here keeps _run_label() free of
+        provider-specific logic. Adding a new provider requires only a new
+        branch in this function, not changes to the labeling loop.
+
+    Args:
+        args: Parsed Namespace from _parse_label_args().
+
+    Returns:
+        A callable accepting a SecurityMetric and returning a LabelResult.
+
+    Raises:
+        SystemExit: If llm mode is requested but required arguments are missing.
+    """
+    import os
+    from classifier.sbom_extractor import classify_metric_threshold, classify_metric_llm
+
+    _log = logging.getLogger(__name__)
+
+    if args.labeler_mode == "threshold":
+        _log.info("label: using threshold labeler")
+        return classify_metric_threshold
+
+    # LLM mode — validate required args and construct the appropriate backend.
+    _ENV_KEYS = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "gemini":    "GEMINI_API_KEY",
+    }
+    provider = args.llm_provider
+    env_var = _ENV_KEYS[provider]
+    api_key = args.llm_api_key or os.environ.get(env_var)
+
+    if not api_key:
+        print(
+            f"error: --labeler-mode=llm with --llm-provider={provider} requires "
+            f"--llm-api-key or the {env_var} environment variable to be set.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if not args.llm_model:
+        print(
+            "error: --labeler-mode=llm requires --llm-model. "
+            "Anthropic examples: 'claude-sonnet-4-6'. "
+            "Gemini examples: 'gemini-2.0-flash'.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if provider == "anthropic":
+        from classifier.backends.anthropic_backend import AnthropicBackend
+        backend = AnthropicBackend(api_key=api_key, model=args.llm_model)
+    else:
+        from classifier.backends.gemini_backend import GeminiBackend
+        backend = GeminiBackend(api_key=api_key, model=args.llm_model)
+
+    system_prompt_path = args.system_prompt  # None → classify_metric_llm uses default
+    _log.info(
+        "label: using LLM labeler (provider=%s model=%s prompt=%s)",
+        provider, args.llm_model, system_prompt_path or "default",
+    )
+
+    # Return a closure so load_bucket receives the standard labeler signature.
+    def llm_labeler(metric):
+        return classify_metric_llm(metric, backend, system_prompt_path)
+
+    return llm_labeler
 
 
 def _run_label(args: Namespace) -> None:
     """Execute the label subcommand."""
     _log = logging.getLogger(__name__)
     output_dir = args.output_dir if args.output_dir is not None else args.data_root
+    labeler = _build_labeler(args)
 
     for bucket_name in BUCKET_LABEL_MAP:
         manifest_csv = args.manifests_dir / f"{bucket_name}.csv"
-        df = load_bucket(manifest_csv, bucket_name, args.data_root)
+        df = load_bucket(manifest_csv, bucket_name, args.data_root, labeler=labeler)
         if df.empty:
             _log.warning("label: bucket '%s' produced no records — skipping CSV write", bucket_name)
             continue

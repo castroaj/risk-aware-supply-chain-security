@@ -20,6 +20,12 @@ dependencies = [
 dev = [
     "pytest>=7.0",
 ]
+llm = [
+    "anthropic>=0.25",
+]
+gemini = [
+    "google-genai>=1.0",
+]
 
 [project.scripts]
 risk-classifier-label   = "classifier.cli:main_label"

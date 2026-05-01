@@ -41,7 +41,7 @@ The `ml-classifier/` directory contains the active implementation of the pipelin
 
 - Scans container images with Trivy to produce CycloneDX JSON SBOMs
 - Extracts an 8-feature vector from each SBOM: vulnerability counts (total, critical, high), CVSS scores, and CWE coverage (unique and MITRE Top 25)
-- Applies a rule-based threshold classifier to assign a preliminary ALLOW / WARN / BLOCK label to each image
+- Labels each image ALLOW / WARN / BLOCK using either a rule-based threshold classifier or an LLM backend (Gemini preferred); labels are frozen as versioned CSVs so any change produces a visible diff
 - Trains a Decision Tree classifier on three labelled data buckets (high-quality, aged/stale, known-vulnerable)
 - Issues ALLOW / WARN / BLOCK predictions with confidence scores for new SBOM inputs
 - Emits structured INFO/DEBUG logs to stdout (and optionally a file) so every classification decision is auditable
@@ -81,24 +81,26 @@ risk-classifier-predict \
 
 All three commands accept `--log-level {DEBUG,INFO,WARNING,ERROR}` and `--log-file FILE` for audit logging.
 
-### Current model — v0.0.4
+### Current model — v0.0.7
 
-Trained on 371 container images across three label buckets (ALLOW=144, BLOCK=123, WARN=104).
+Trained on 371 container images with LLM-generated labels (`gemini-2.5-flash`, `system-prompt-v3.md`). Class distribution: ALLOW=21, WARN=164, BLOCK=186.
 
 | Metric | Value |
 |---|---|
 | Dataset | 371 images (train=296 / test=75) |
-| Test accuracy | 97.33% |
-| CV accuracy | 96.96% ± 1.97% (5-fold stratified) |
-| ALLOW F1 | 0.96 |
-| WARN F1 | 1.00 |
-| BLOCK F1 | 0.96 |
+| Test accuracy | 92.00% |
+| CV accuracy | 92.21% ± 4.76% (5-fold stratified) |
+| ALLOW F1 | 1.00 |
+| WARN F1 | 0.91 |
+| BLOCK F1 | 0.92 |
 
-Hyperparameters: `max_depth=5`, `min_samples_split=6`, `min_samples_leaf=2`, `class_weight={'ALLOW':1,'WARN':2,'BLOCK':4}`, `random_state=42`.
+Hyperparameters: `max_depth=4`, `min_samples_split=4`, `min_samples_leaf=2`, `class_weight={'ALLOW':4,'WARN':2,'BLOCK':2}`, `random_state=42`.
 
-Key changes from v0.0.3: WARN thresholds further tightened (`critical_cve_count` 10→20, `cvss_ge_7_count` 100→150), shifting 8 images out of WARN into ALLOW and producing a cleaner ALLOW/WARN decision boundary; WARN F1 reaches 1.00 (perfect precision and recall on the test set); a confidence-based escalation policy is applied at prediction time — WARN predictions below 0.75 confidence are promoted to BLOCK, and BLOCK is never downgraded.
+Key changes from v0.0.6: labels were regenerated with `system-prompt-v3.md`, which introduces a density ratio (`top25_cwe_count / total_dependency_count`) as the primary BLOCK signal and adds calibrated examples at the WARN/BLOCK boundary. The v3 prompt de-weights `max_cvss` as a standalone escalation trigger and replaces threshold-list guidance with pattern-based archetypes. The result is a substantially more balanced WARN/BLOCK split (WARN=164 vs. 100 in v0.0.6, BLOCK=186 vs. 250), improving WARN F1 from 0.81 to 0.91 — the most operationally important class for the deployment gate.
 
-Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.4/`](./ml-classifier/model-results/model-0.0.4/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
+See [`ml-classifier/analysis/training-run-cross-comparison.md`](./ml-classifier/analysis/training-run-cross-comparison.md) for the full version history and rationale, and [`ml-classifier/analysis/llm-labeling-proposal.md`](./ml-classifier/analysis/llm-labeling-proposal.md) for the system prompt evolution history.
+
+Model artifacts and the full classification report are in [`ml-classifier/model-results/model-0.0.7/`](./ml-classifier/model-results/model-0.0.7/). Subsequent training runs are written to timestamped subdirectories under `ml-classifier/training-runs/`.
 
 ### Feature vector (8 features)
 

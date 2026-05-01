@@ -10,22 +10,67 @@ TIMESTAMP    := $(shell date +%Y%m%d-%H%M%S)
 OUTPUT_DIR   := $(RUNS_DIR)/$(TIMESTAMP)
 
 # Hyper-params
-MIN_SAMPLES_SPLIT := 6
+MAX_DEPTH := 4
+MIN_SAMPLES_SPLIT := 4
 MIN_SAMPLES_LEAF := 2
-CLASS_WEIGHT := '{"ALLOW":1, "WARN":2,"BLOCK":4}'
+CLASS_WEIGHT := '{"ALLOW":4, "WARN":2, "BLOCK":2}'
+TEST_SIZE := 0.2
 
-.PHONY: install label test train clean build
+# LLM labeling — set via environment or make argument.
+#
+# Anthropic (default):
+#   make label-llm-anthropic
+#   make label-llm-anthropic LLM_MODEL=claude-haiku-4-5-20251001
+#   make label-llm-anthropic SYSTEM_PROMPT=config/system-prompt-v3.md
+#   ANTHROPIC_API_KEY=sk-ant-... make label-llm-anthropic
+#
+# Gemini:
+#   make label-llm-gemini
+#   make label-llm-gemini GEMINI_MODEL=gemini-2.5-flash
+#   make label-llm-gemini SYSTEM_PROMPT=config/system-prompt-v3.md
+#   GEMINI_API_KEY=AIza... make label-llm-gemini
+LLM_MODEL            ?= claude-sonnet-4-6
+LLM_API_KEY          ?= $(ANTHROPIC_API_KEY)
+GEMINI_MODEL         ?= gemini-2.5-flash
+GEMINI_API_KEY       ?= $(GEMINI_API_KEY)
+SYSTEM_PROMPT        ?= config/system-prompt-v3.md
+
+.PHONY: install label label-llm-anthropic label-llm-gemini test train clean build
 
 ## install  — create venv and install package in editable mode with dev extras
 install:
 	./setup.sh
 
-## label    — extract features and assign rule labels; write per-bucket CSVs to data/scans/
+## label     — extract features and assign rule labels (threshold mode); write per-bucket CSVs
 label:
 	$(VENV)/bin/risk-classifier-label \
 		--manifests-dir $(MANIFESTS) \
 		--data-root $(DATA_ROOT) \
 		--output-dir $(LABELS_ROOT)
+
+## label-llm-anthropic — LLM-assisted labels via Anthropic (claude-sonnet-4-6 by default)
+label-llm-anthropic:
+	$(VENV)/bin/risk-classifier-label \
+		--manifests-dir $(MANIFESTS) \
+		--data-root $(DATA_ROOT) \
+		--output-dir $(LABELS_ROOT) \
+		--labeler-mode llm \
+		--llm-provider anthropic \
+		--llm-model $(LLM_MODEL) \
+		--llm-api-key $(LLM_API_KEY) \
+		--system-prompt $(SYSTEM_PROMPT)
+
+## label-llm-gemini — LLM-assisted labels via Google Gemini (gemini-2.5-flash by default)
+label-llm-gemini:
+	$(VENV)/bin/risk-classifier-label \
+		--manifests-dir $(MANIFESTS) \
+		--data-root $(DATA_ROOT) \
+		--output-dir $(LABELS_ROOT) \
+		--labeler-mode llm \
+		--llm-provider gemini \
+		--llm-model $(GEMINI_MODEL) \
+		--llm-api-key $(GEMINI_API_KEY) \
+		--system-prompt $(SYSTEM_PROMPT)
 
 ## test     — run the full test suite
 test:
@@ -37,9 +82,11 @@ train:
 	$(VENV)/bin/risk-classifier-train \
 		--labels-dir $(LABELS_ROOT) \
 		--output-dir $(OUTPUT_DIR) \
+		--max-depth $(MAX_DEPTH) \
 		--min-samples-split $(MIN_SAMPLES_SPLIT) \
 		--min-samples-leaf $(MIN_SAMPLES_LEAF) \
-		--class-weight $(CLASS_WEIGHT)
+		--class-weight $(CLASS_WEIGHT) \
+		--test-size $(TEST_SIZE)
 
 ## build    — build a source distribution and wheel into dist/
 build:

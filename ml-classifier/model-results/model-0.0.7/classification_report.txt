@@ -1,0 +1,68 @@
+Risk-Aware Supply Chain Security — Decision Tree Classifier
+============================================================
+
+Dataset size       : 371 images
+Train / Test split : 296 / 75
+Class distribution : ALLOW=21, BLOCK=186, WARN=164
+
+Hyperparameters:
+  criterion         : gini
+  max_depth         : 4
+  min_samples_split : 4
+  min_samples_leaf  : 2
+  class_weight      : {'ALLOW': 4, 'WARN': 2, 'BLOCK': 2}
+  random_state      : 42
+  test_size         : 0.20
+  cv_folds          : 5
+
+Test Accuracy      : 0.9200
+CV Accuracy        : 0.9221 ± 0.0476 (5-fold stratified)
+
+Escalation Policy:
+  WARN confidence threshold : 0.75
+  WARNs escalated to BLOCK  : 0 (test set)
+  BLOCK predictions         : never downgraded
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       ALLOW       1.00      1.00      1.00         4
+       BLOCK       0.92      0.92      0.92        38
+        WARN       0.91      0.91      0.91        33
+
+    accuracy                           0.92        75
+   macro avg       0.94      0.94      0.94        75
+weighted avg       0.92      0.92      0.92        75
+
+Decision Tree Rules:
+|--- top25_cwe_count <= 57.50
+|   |--- cvss_ge_7_count <= 0.50
+|   |   |--- class: 0
+|   |--- cvss_ge_7_count >  0.50
+|   |   |--- cvss_ge_7_count <= 45.50
+|   |   |   |--- total_dependency_count <= 41.50
+|   |   |   |   |--- class: 2
+|   |   |   |--- total_dependency_count >  41.50
+|   |   |   |   |--- class: 2
+|   |   |--- cvss_ge_7_count >  45.50
+|   |   |   |--- total_dependency_count <= 127.50
+|   |   |   |   |--- class: 1
+|   |   |   |--- total_dependency_count >  127.50
+|   |   |   |   |--- class: 2
+|--- top25_cwe_count >  57.50
+|   |--- total_dependency_count <= 852.00
+|   |   |--- critical_cve_count <= 11.00
+|   |   |   |--- total_dependency_count <= 410.00
+|   |   |   |   |--- class: 1
+|   |   |   |--- total_dependency_count >  410.00
+|   |   |   |   |--- class: 2
+|   |   |--- critical_cve_count >  11.00
+|   |   |   |--- total_dependency_count <= 627.00
+|   |   |   |   |--- class: 1
+|   |   |   |--- total_dependency_count >  627.00
+|   |   |   |   |--- class: 1
+|   |--- total_dependency_count >  852.00
+|   |   |--- top25_cwe_count <= 153.50
+|   |   |   |--- class: 2
+|   |   |--- top25_cwe_count >  153.50
+|   |   |   |--- class: 1
