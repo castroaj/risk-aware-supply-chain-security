@@ -1,0 +1,71 @@
+Risk-Aware Supply Chain Security — Decision Tree Classifier
+============================================================
+
+Dataset size       : 507 images
+Train / Test split : 405 / 102
+Class distribution : ALLOW=44, BLOCK=247, WARN=216
+
+Hyperparameters:
+  criterion         : gini
+  max_depth         : 4
+  min_samples_split : 4
+  min_samples_leaf  : 2
+  class_weight      : {'ALLOW': 4, 'WARN': 2, 'BLOCK': 2}
+  random_state      : 42
+  test_size         : 0.20
+  cv_folds          : 5
+
+Test Accuracy      : 0.8922
+CV Accuracy        : 0.8889 ± 0.0207 (5-fold stratified)
+
+Escalation Policy:
+  WARN confidence threshold : 0.75
+  WARNs escalated to BLOCK  : 1 (test set)
+  BLOCK predictions         : never downgraded
+
+Classification Report:
+              precision    recall  f1-score   support
+
+       ALLOW       0.89      0.89      0.89         9
+       BLOCK       0.89      0.94      0.91        50
+        WARN       0.90      0.84      0.87        43
+
+    accuracy                           0.89       102
+   macro avg       0.89      0.89      0.89       102
+weighted avg       0.89      0.89      0.89       102
+
+Decision Tree Rules:
+|--- top25_cwe_count <= 59.50
+|   |--- max_cvss <= 7.65
+|   |   |--- top25_cwe_count <= 1.50
+|   |   |   |--- class: 0
+|   |   |--- top25_cwe_count >  1.50
+|   |   |   |--- class: 2
+|   |--- max_cvss >  7.65
+|   |   |--- total_dependency_count <= 101.50
+|   |   |   |--- high_cve_count <= 22.50
+|   |   |   |   |--- class: 2
+|   |   |   |--- high_cve_count >  22.50
+|   |   |   |   |--- class: 1
+|   |   |--- total_dependency_count >  101.50
+|   |   |   |--- vuln_total <= 166.00
+|   |   |   |   |--- class: 2
+|   |   |   |--- vuln_total >  166.00
+|   |   |   |   |--- class: 2
+|--- top25_cwe_count >  59.50
+|   |--- total_dependency_count <= 684.00
+|   |   |--- cvss_ge_7_count <= 84.50
+|   |   |   |--- total_dependency_count <= 258.50
+|   |   |   |   |--- class: 1
+|   |   |   |--- total_dependency_count >  258.50
+|   |   |   |   |--- class: 2
+|   |   |--- cvss_ge_7_count >  84.50
+|   |   |   |--- total_dependency_count <= 566.50
+|   |   |   |   |--- class: 1
+|   |   |   |--- total_dependency_count >  566.50
+|   |   |   |   |--- class: 1
+|   |--- total_dependency_count >  684.00
+|   |   |--- vuln_total <= 483.50
+|   |   |   |--- class: 2
+|   |   |--- vuln_total >  483.50
+|   |   |   |--- class: 1
