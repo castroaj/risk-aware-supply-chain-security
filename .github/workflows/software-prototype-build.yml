@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
@@ -89,6 +90,7 @@ jobs:
         run: make install
 
       - name: Classify SBOM with ML risk model
+        id: classify
         working-directory: ${{ github.workspace }}
         run: |
           ml-classifier/.venv/bin/risk-classifier-predict \
@@ -113,6 +115,9 @@ jobs:
           ML_LABEL="${ML_RESULT%%:*}"
           ML_CONFIDENCE="${ML_RESULT##*:}"
 
+          echo "ml_label=${ML_LABEL}" >> $GITHUB_OUTPUT
+          echo "ml_confidence=${ML_CONFIDENCE}" >> $GITHUB_OUTPUT
+
           if [ "$ML_LABEL" = "BLOCK" ]; then
             echo "::error::ML risk classifier returned BLOCK (confidence=${ML_CONFIDENCE}). Deployment blocked."
             exit 1
@@ -121,6 +126,53 @@ jobs:
           else
             echo "ML risk classifier returned ALLOW (confidence=${ML_CONFIDENCE}). Proceeding."
           fi
+
+      - name: Write ML classification to job summary
+        if: always() && steps.classify.outputs.ml_label != ''
+        run: |
+          ML_LABEL="${{ steps.classify.outputs.ml_label }}"
+          ML_CONFIDENCE="${{ steps.classify.outputs.ml_confidence }}"
+          case "$ML_LABEL" in
+            ALLOW) ICON="✅" ;;
+            WARN)  ICON="⚠️" ;;
+            BLOCK) ICON="🚫" ;;
+            *)     ICON="❓" ;;
+          esac
+          {
+            echo "## ${ICON} ML Risk Classification: \`${ML_LABEL}\`"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Label | \`${ML_LABEL}\` |"
+            echo "| Confidence | ${ML_CONFIDENCE} |"
+            echo "| Model | \`$(readlink ${{ github.workspace }}/ml-classifier/model-results/latest)\` |"
+            echo "| SBOM | \`trivy-sbom.cdx.json\` |"
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Post ML classification comment to PR
+        if: github.event_name == 'pull_request' && steps.classify.outputs.ml_label != 'ALLOW'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ML_LABEL="${{ steps.classify.outputs.ml_label }}"
+          ML_CONFIDENCE="${{ steps.classify.outputs.ml_confidence }}"
+          MODEL=$(readlink ${{ github.workspace }}/ml-classifier/model-results/latest)
+          case "$ML_LABEL" in
+            WARN)  ICON="⚠️" ; MESSAGE="Elevated supply chain risk detected. Review recommended before merging." ;;
+            BLOCK) ICON="🚫" ; MESSAGE="High supply chain risk detected. Deployment blocked — security review required." ;;
+          esac
+          gh pr comment ${{ github.event.pull_request.number }} --body "## ${ICON} ML Risk Classifier: \`${ML_LABEL}\`
+
+          ${MESSAGE}
+
+          | Field | Value |
+          |---|---|
+          | Label | \`${ML_LABEL}\` |
+          | Confidence | ${ML_CONFIDENCE} |
+          | Model | \`${MODEL}\` |
+          | SBOM | \`trivy-sbom.cdx.json\` |
+
+          See the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for the full classification report."
 
       - name: Upload distribution artifacts
         uses: actions/upload-artifact@v4
